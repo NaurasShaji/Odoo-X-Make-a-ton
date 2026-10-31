@@ -1,0 +1,3 @@
+ALTER TABLE "QuotationLine" ADD COLUMN "discountAmount" DECIMAL(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE "SubscriptionLine" ADD COLUMN "discountAmount" DECIMAL(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE "InvoiceLine" ADD COLUMN "discountAmount" DECIMAL(12,2) NOT NULL DEFAULT 0;
