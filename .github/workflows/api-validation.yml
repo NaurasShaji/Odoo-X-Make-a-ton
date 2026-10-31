@@ -1,0 +1,35 @@
+name: API validation
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "package.json"
+      - ".github/workflows/api-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "package.json"
+      - ".github/workflows/api-validation.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Validate Prisma schema
+        run: npm --workspace @nexbill/api run prisma:validate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexbill?schema=public
+      - name: Generate Prisma client
+        run: npm --workspace @nexbill/api run prisma:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexbill?schema=public
+      - run: npm run typecheck:api
+      - run: npm --workspace @nexbill/api run test
+      - run: npm run build:api
