@@ -15,13 +15,15 @@ NexBill is an active development project. The repository currently includes:
 - Tenant-scoped customer, product, plan, subscription, quotation and invoice APIs.
 - Product variants and plan-to-product associations.
 - Quotation lifecycle actions and conversion into subscriptions.
-- Subscription lifecycle actions, recurring invoice generation and duplicate-period protection.
-- Invoice confirmation, cancellation and manual payment recording.
-- Percentage and fixed quotation discounts, proportional line allocation and tax-after-discount calculations.
-- Revenue dashboard metrics and upcoming renewal data.
-- PostgreSQL/Prisma migrations and an initial React workspace/customer interface.
+- Subscription lifecycle actions with plan pause/early-close rules, scheduled auto-renewal and auto-close processing.
+- Invoice confirmation, cancellation, recurring invoice generation and duplicate-period protection.
+- Tenant-scoped payment recording, idempotency keys, refund ledger entries and invoice settlement reconciliation.
+- Percentage and fixed quotation discounts, reusable discount and tax rules, proportional discount allocation and tax-after-discount calculations.
+- Revenue dashboard metrics and outstanding/overdue balances net of successful refunds.
+- React navigation and list views for customers, products, plans, subscriptions, quotations, invoices, payments, pricing rules and reports.
+- PostgreSQL/Prisma migrations and API/frontend CI validation.
 
-The API foundation is substantially ahead of the frontend. The current web interface does not yet expose every backend module, and the repository is not production-ready. Payment gateway integration, refund processing, invoice PDF/email delivery, customer self-service, configurable tax rules, deployment configuration and end-to-end validation remain outstanding.
+The API foundation is substantially ahead of the frontend. The frontend module views are currently read-focused; create/edit workflows still need to be completed across the remaining modules. The repository is not production-ready. Payment gateway adapters and webhooks, invoice PDF/email delivery, customer self-service portal, advanced analytics, provider-backed notifications, deployment configuration and end-to-end validation remain outstanding. Saved tax and discount rules can be applied when creating quotations; tax rates are snapshotted on quotation lines.
 
 ## Technology stack
 
