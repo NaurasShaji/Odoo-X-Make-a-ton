@@ -27,26 +27,38 @@ export async function generateDueInvoices(businessId?: string, now = new Date())
     const subtotal = money(subscription.lines.reduce((sum, line) => sum + Number(line.amount), 0));
     const taxTotal = money(subscription.lines.reduce((sum, line) => sum + Number(line.amount) * Number(line.taxRate) / 100, 0));
     const total = money(subtotal + taxTotal);
-    const invoice = await prisma.invoice.create({
-      data: {
-        businessId: subscription.businessId,
-        number: `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
-        customerId: subscription.customerId,
-        subscriptionId: subscription.id,
-        recurringKey,
-        billingPeriodKey: periodStart.toISOString().slice(0, 10),
-        periodStart,
-        periodEnd,
-        dueDate: periodStart,
-        subtotal,
-        discountTotal: 0,
-        taxTotal,
-        total,
-        status: "DRAFT",
-        lines: { create: subscription.lines.map((line) => ({ businessId: subscription.businessId, productId: line.productId, description: `Subscription ${subscription.number}`, quantity: line.quantity, unitPrice: line.unitPrice, taxRate: line.taxRate, amount: line.amount })) }
-      },
-      select: { id: true }
-    });
+    let invoice: { id: string };
+    try {
+      invoice = await prisma.invoice.create({
+        data: {
+          businessId: subscription.businessId,
+          number: `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+          customerId: subscription.customerId,
+          subscriptionId: subscription.id,
+          recurringKey,
+          billingPeriodKey: periodStart.toISOString().slice(0, 10),
+          periodStart,
+          periodEnd,
+          dueDate: periodStart,
+          subtotal,
+          discountTotal: 0,
+          taxTotal,
+          total,
+          status: "DRAFT",
+          lines: { create: subscription.lines.map((line) => ({ businessId: subscription.businessId, productId: line.productId, description: `Subscription ${subscription.number}`, quantity: line.quantity, unitPrice: line.unitPrice, taxRate: line.taxRate, amount: line.amount })) }
+        },
+        select: { id: true }
+      });
+    } catch (error) {
+      // Another worker may have inserted this recurring period after our initial lookup.
+      const racedInvoice = await prisma.invoice.findFirst({
+        where: { businessId: subscription.businessId, recurringKey },
+        select: { id: true }
+      });
+      if (!racedInvoice) throw error;
+      results.push({ subscriptionId: subscription.id, status: "skipped", reason: "already_billed", invoiceId: racedInvoice.id });
+      continue;
+    }
     results.push({ subscriptionId: subscription.id, status: "generated", invoiceId: invoice.id });
   }
   return { checked: subscriptions.length, generated: results.filter((r) => r.status === "generated").length, skipped: results.filter((r) => r.status === "skipped").length, results };
