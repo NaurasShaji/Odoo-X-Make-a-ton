@@ -30,6 +30,15 @@ enum SubscriptionStatus {
   CLOSED
 }
 
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
 enum InvoiceStatus {
   DRAFT
   CONFIRMED
@@ -76,6 +85,7 @@ model Business {
   subscriptions Subscription[]
   invoices      Invoice[]
   invitations   BusinessInvitation[]
+  quotations    Quotation[]
 }
 
 model Membership {
@@ -107,6 +117,7 @@ model Customer {
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   subscriptions Subscription[]
   invoices   Invoice[]
+  quotations Quotation[]
 
   @@index([businessId, email])
   @@unique([id, businessId])
@@ -126,6 +137,7 @@ model Product {
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   variants    ProductVariant[]
   planItems   PlanItem[]
+  quotationLines QuotationLine[]
   subscriptionLines SubscriptionLine[]
   invoiceLines InvoiceLine[]
 
@@ -161,6 +173,7 @@ model Plan {
   business       Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   items          PlanItem[]
   subscriptions  Subscription[]
+  quotations     Quotation[]
 
   @@unique([id, businessId])
   @@index([businessId, name])
@@ -194,6 +207,8 @@ model Subscription {
   plan       Plan               @relation(fields: [planId, businessId], references: [id, businessId])
   lines      SubscriptionLine[]
   invoices   Invoice[]
+  quotationId String? @unique
+  quotation   Quotation? @relation("QuotationConversion", fields: [quotationId], references: [id])
 
   @@unique([businessId, number])
   @@unique([id, businessId])
@@ -213,6 +228,48 @@ model SubscriptionLine {
   subscription   Subscription @relation(fields: [subscriptionId, businessId], references: [id, businessId], onDelete: Cascade)
   product        Product      @relation(fields: [productId, businessId], references: [id, businessId])
   @@index([subscriptionId])
+}
+
+
+model Quotation {
+  id             String          @id @default(cuid())
+  businessId     String
+  number         String
+  customerId     String
+  planId         String
+  status         QuotationStatus @default(DRAFT)
+  validUntil     DateTime?
+  notes          String?
+  subtotal       Decimal         @db.Decimal(12, 2)
+  discountTotal  Decimal         @db.Decimal(12, 2)
+  taxTotal       Decimal         @db.Decimal(12, 2)
+  total          Decimal         @db.Decimal(12, 2)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  business       Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer       Customer        @relation(fields: [customerId, businessId], references: [id, businessId])
+  plan           Plan            @relation(fields: [planId, businessId], references: [id, businessId])
+  lines          QuotationLine[]
+  convertedSubscription Subscription? @relation("QuotationConversion")
+  @@unique([businessId, number])
+  @@unique([id, businessId])
+  @@index([businessId, status, createdAt])
+  @@index([customerId, status])
+}
+
+model QuotationLine {
+  id          String    @id @default(cuid())
+  businessId  String
+  quotationId String
+  productId   String
+  description String
+  quantity    Decimal   @db.Decimal(12, 2)
+  unitPrice   Decimal   @db.Decimal(12, 2)
+  taxRate     Decimal   @db.Decimal(5, 2)
+  amount      Decimal   @db.Decimal(12, 2)
+  quotation   Quotation @relation(fields: [quotationId, businessId], references: [id, businessId], onDelete: Cascade)
+  product     Product   @relation(fields: [productId, businessId], references: [id, businessId])
+  @@index([quotationId])
 }
 
 model Invoice {
