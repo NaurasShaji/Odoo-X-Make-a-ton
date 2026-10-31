@@ -146,3 +146,19 @@ For single-business self-hosted installs, use one business and do not disable te
 ## 9. Current Limitations
 
 This document describes the intended architecture, not completed functionality. The API routes are still placeholders, the BullMQ worker does not yet execute billing logic, and authentication, tenant isolation, payment reconciliation and business workflows remain to be implemented. Prisma schema validation, migration generation and automated tests must pass before this schema is treated as deployable.
+
+
+## Workspace membership and invitations
+
+The API exposes authenticated workspace management under `/api/v1/workspaces`:
+
+- `GET /`: list workspaces for the authenticated user.
+- `GET /members`: list members in the workspace selected by `x-business-id`.
+- `POST /invitations`: administrators create invitations for STAFF, FINANCE or CUSTOMER roles.
+- `POST /invitations/accept`: an authenticated user accepts an invitation only when their account email matches the invited email.
+- `PATCH /members/:userId/role`: administrators update a member's role.
+- `DELETE /members/:userId`: administrators remove a member.
+
+Invitation tokens are generated using a cryptographically secure random source. Only a SHA-256 hash is stored in the database; the raw token is returned once because no email delivery provider is configured yet. Tokens expire after seven days. Deliver tokens only to the intended email address.
+
+The API prevents an administrator from removing themselves or demoting/removing the last administrator. These checks are application-level safeguards; concurrency and email-delivery integration require additional production hardening before launch.
