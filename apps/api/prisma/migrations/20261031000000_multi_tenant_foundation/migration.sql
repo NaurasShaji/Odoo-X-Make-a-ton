@@ -45,18 +45,20 @@ FROM "User";
 
 ALTER TABLE "User" DROP COLUMN "role";
 
-ALTER TABLE "Customer" DROP CONSTRAINT "Customer_userId_key";
+-- The baseline creates Prisma @unique fields as unique indexes, not
+-- table constraints. Drop those indexes using PostgreSQL's DROP INDEX.
+DROP INDEX "Customer_userId_key";
 CREATE UNIQUE INDEX "Customer_businessId_userId_key" ON "Customer"("businessId", "userId");
 CREATE INDEX "Customer_businessId_name_idx" ON "Customer"("businessId", "name");
 CREATE INDEX "Product_businessId_name_idx" ON "Product"("businessId", "name");
 CREATE INDEX "Plan_businessId_name_idx" ON "Plan"("businessId", "name");
 
-ALTER TABLE "Subscription" DROP CONSTRAINT "Subscription_number_key";
+DROP INDEX "Subscription_number_key";
 CREATE UNIQUE INDEX "Subscription_businessId_number_key" ON "Subscription"("businessId", "number");
 CREATE INDEX "Subscription_businessId_status_expiryDate_idx" ON "Subscription"("businessId", "status", "expiryDate");
 
-ALTER TABLE "Invoice" DROP CONSTRAINT "Invoice_number_key";
-ALTER TABLE "Invoice" DROP CONSTRAINT "Invoice_recurringKey_key";
+DROP INDEX "Invoice_number_key";
+DROP INDEX "Invoice_recurringKey_key";
 CREATE UNIQUE INDEX "Invoice_businessId_number_key" ON "Invoice"("businessId", "number");
 CREATE UNIQUE INDEX "Invoice_businessId_recurringKey_key" ON "Invoice"("businessId", "recurringKey");
 CREATE INDEX "Invoice_businessId_status_dueDate_idx" ON "Invoice"("businessId", "status", "dueDate");
@@ -89,7 +91,7 @@ UPDATE "PlanItem" i SET "businessId" = p."businessId" FROM "Plan" p WHERE p."id"
 ALTER TABLE "SubscriptionLine" ADD COLUMN "businessId" TEXT;
 UPDATE "SubscriptionLine" l SET "businessId" = s."businessId" FROM "Subscription" s WHERE s."id" = l."subscriptionId";
 ALTER TABLE "InvoiceLine" ADD COLUMN "businessId" TEXT;
-UPDATE "InvoiceLine" l SET "businessId" = i."businessId" FROM "Invoice" i WHERE i."id" = l."invoiceId";
+UPDATE "InvoiceLine" l SET "businessId" = i."businessId" FROM "Invoice" i WHERE i."id" = l."id";
 ALTER TABLE "Payment" ADD COLUMN "businessId" TEXT;
 UPDATE "Payment" p SET "businessId" = i."businessId" FROM "Invoice" i WHERE i."id" = p."invoiceId";
 
