@@ -91,7 +91,7 @@ UPDATE "PlanItem" i SET "businessId" = p."businessId" FROM "Plan" p WHERE p."id"
 ALTER TABLE "SubscriptionLine" ADD COLUMN "businessId" TEXT;
 UPDATE "SubscriptionLine" l SET "businessId" = s."businessId" FROM "Subscription" s WHERE s."id" = l."subscriptionId";
 ALTER TABLE "InvoiceLine" ADD COLUMN "businessId" TEXT;
-UPDATE "InvoiceLine" l SET "businessId" = i."businessId" FROM "Invoice" i WHERE i."id" = l."id";
+UPDATE "InvoiceLine" l SET "businessId" = i."businessId" FROM "Invoice" i WHERE i."id" = l."invoiceId";
 ALTER TABLE "Payment" ADD COLUMN "businessId" TEXT;
 UPDATE "Payment" p SET "businessId" = i."businessId" FROM "Invoice" i WHERE i."id" = p."invoiceId";
 
