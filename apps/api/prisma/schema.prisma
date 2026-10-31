@@ -60,7 +60,6 @@ model User {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   memberships  Membership[]
-  customers    Customer[]
   invitationsCreated BusinessInvitation[] @relation("InvitationCreator")
 }
 
@@ -87,9 +86,8 @@ model Membership {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([businessId, userId])
+  @@index([businessId, email])
   @@index([userId])
   @@index([businessId, role])
 }
@@ -97,8 +95,12 @@ model Membership {
 model Customer {
   id         String   @id @default(cuid())
   businessId String
-  userId     String
   name       String
+  email      String?
+  phone      String?
+  companyName String?
+  address    String?
+  notes      String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
