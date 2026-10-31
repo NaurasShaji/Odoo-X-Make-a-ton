@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+import { API_BASE, createApiRequest } from "./api";
+import ProductsPage from "./products/ProductsPage";
 
 type Workspace = {
   businessId: string;
@@ -62,16 +62,7 @@ function App() {
     [workspaces, selectedBusinessId]
   );
 
-  async function apiRequest<T>(path: string, options: RequestInit = {}, businessId?: string): Promise<T> {
-    const headers = new Headers(options.headers);
-    if (options.body) headers.set("Content-Type", "application/json");
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    if (businessId) headers.set("x-business-id", businessId);
-    const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error ?? data.message ?? `Request failed (${response.status})`);
-    return data as T;
-  }
+  const apiRequest = useMemo(() => createApiRequest(token), [token]);
 
   async function loadWorkspaces(activeToken = token) {
     const headers = { Authorization: `Bearer ${activeToken}` };
@@ -121,7 +112,6 @@ function App() {
   }, [token, selectedBusinessId, page]);
 
   const moduleConfig = {
-    products: { endpoint: "/api/v1/products", key: "products", title: "Products", description: "Manage your billable products and variants." },
     plans: { endpoint: "/api/v1/plans", key: "plans", title: "Subscription plans", description: "Manage recurring plans, billing periods and plan items." },
     subscriptions: { endpoint: "/api/v1/subscriptions", key: "subscriptions", title: "Subscriptions", description: "Review subscription lifecycle and customer assignments." },
     quotations: { endpoint: "/api/v1/quotations", key: "quotations", title: "Quotations", description: "Track quotations, totals and conversion status." },
@@ -132,7 +122,7 @@ function App() {
   } as const;
 
   async function loadModule() {
-    if (!selectedBusinessId || page === "overview" || page === "customers") return;
+    if (!selectedBusinessId || page === "overview" || page === "customers" || page === "products") return;
     setModuleBusy(true);
     setModuleError("");
     try {
@@ -156,7 +146,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (token && selectedBusinessId && page !== "overview" && page !== "customers") void loadModule();
+    if (token && selectedBusinessId && page !== "overview" && page !== "customers" && page !== "products") void loadModule();
   }, [token, selectedBusinessId, page]);
 
   function moduleTitle(row: Record<string, unknown>) {
@@ -315,6 +305,8 @@ function App() {
             </section>
             {customerModal && <div className="modal-backdrop" role="presentation"><section className="customer-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><div className="modal-heading"><div><p className="eyebrow muted">{editingCustomerId ? "CUSTOMER DETAILS" : "NEW RECORD"}</p><h2 id="customer-modal-title">{editingCustomerId ? "Edit customer" : "Add customer"}</h2></div><button className="modal-close" onClick={() => setCustomerModal(false)} aria-label="Close">×</button></div><form className="customer-form" onSubmit={saveCustomer}><label>Customer name *<input required maxLength={160} value={customerForm.name} onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })} /></label><div className="form-two-col"><label>Email<input type="email" maxLength={254} value={customerForm.email} onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })} /></label><label>Phone<input maxLength={40} value={customerForm.phone} onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })} /></label></div><label>Company name<input maxLength={160} value={customerForm.companyName} onChange={(e) => setCustomerForm({ ...customerForm, companyName: e.target.value })} /></label><label>Address<textarea rows={2} maxLength={1000} value={customerForm.address} onChange={(e) => setCustomerForm({ ...customerForm, address: e.target.value })} /></label><label>Notes<textarea rows={3} maxLength={2000} value={customerForm.notes} onChange={(e) => setCustomerForm({ ...customerForm, notes: e.target.value })} /></label>{customerError && <div className="alert error">{customerError}</div>}<div className="modal-actions"><button type="button" className="outline-button" onClick={() => setCustomerModal(false)}>Cancel</button><button className="primary-button add-customer-button" type="submit" disabled={customerBusy}>{customerBusy ? "Saving…" : editingCustomerId ? "Save changes" : "Create customer"}</button></div></form></section></div>}
           </>
+        ) : page === "products" ? (
+          selectedBusinessId ? <ProductsPage key={selectedBusinessId} apiRequest={apiRequest} businessId={selectedBusinessId} /> : <p className="empty-state">Loading workspace…</p>
         ) : page !== "overview" ? (
           <>
             <header className="section-heading customer-page-heading"><div><p className="eyebrow muted">BUSINESS OPERATIONS</p><h2>{page === "reports" ? "Reports & analytics" : moduleConfig[page].title}</h2><p className="muted helper">{page === "reports" ? "Revenue metrics and upcoming renewal activity." : moduleConfig[page].description}</p></div><button className="outline-button" onClick={() => void loadModule()}>Refresh</button></header>

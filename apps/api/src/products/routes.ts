@@ -1,37 +1,49 @@
 import { Router, type Request } from "express";
-import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { AuthenticatedRequest, requireTenantRole, tenantScope } from "../tenancy/context.js";
+import { PRODUCT_SORTS, fieldErrors, parseListQuery, productCreateSchema, productUpdateSchema, variantSchema } from "./validation.js";
 
 const router = Router();
-const money = z.number().finite().min(0).max(9999999999.99);
-const productSchema = z.object({ name: z.string().trim().min(1).max(160), type: z.string().trim().min(1).max(60), salesPrice: money, costPrice: money, notes: z.string().trim().max(2000).optional().or(z.literal("")) }).strict();
-const variantSchema = z.object({ name: z.string().trim().min(1).max(120), priceAddOn: money }).strict();
 const businessId = (req: AuthenticatedRequest) => req.auth?.tenant?.businessId ?? (() => { throw new Error("Verified business context is missing."); })();
 const idOf = (req: Request) => typeof req.params.productId === "string" ? req.params.productId : null;
+const isFkViolation = (e: unknown) => typeof e === "object" && e !== null && "code" in e && (e as { code?: string }).code === "P2003";
 
 router.use(requireTenantRole("ADMIN", "STAFF"));
 
 router.get("/", async (req, res, next) => {
   try {
     const business = businessId(req as AuthenticatedRequest);
-    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-    const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number.parseInt(String(req.query.pageSize ?? "20"), 10) || 20));
-    const where = tenantScope(business, search ? { OR: [{ name: { contains: search, mode: "insensitive" as const } }, { type: { contains: search, mode: "insensitive" as const } }] } : {});
+    const { search, type, sort, page, pageSize } = parseListQuery(req.query as Record<string, unknown>);
+    const filters: Prisma.ProductWhereInput[] = [];
+    if (search) filters.push({ OR: [{ name: { contains: search, mode: "insensitive" } }, { type: { contains: search, mode: "insensitive" } }, { notes: { contains: search, mode: "insensitive" } }, { variants: { some: { name: { contains: search, mode: "insensitive" } } } }] });
+    if (type) filters.push({ type: { equals: type, mode: "insensitive" } });
+    const where = tenantScope(business, filters.length ? { AND: filters } : {});
     const [products, total] = await prisma.$transaction([
-      prisma.product.findMany({ where, include: { variants: true }, orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize }),
+      prisma.product.findMany({ where, include: { variants: { orderBy: { name: "asc" } } }, orderBy: PRODUCT_SORTS[sort], skip: (page - 1) * pageSize, take: pageSize }),
       prisma.product.count({ where })
     ]);
     res.json({ products, pagination: { page, pageSize, total, pages: Math.ceil(total / pageSize) } });
   } catch (e) { next(e); }
 });
 
-router.post("/", async (req, res, next) => {
-  const parsed = productSchema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "Invalid product details.", details: parsed.error.flatten() }); return; }
+router.get("/types", async (req, res, next) => {
   try {
-    const product = await prisma.product.create({ data: { ...parsed.data, notes: parsed.data.notes?.trim() || null, businessId: businessId(req as AuthenticatedRequest) }, include: { variants: true } });
+    const rows = await prisma.product.findMany({ where: tenantScope(businessId(req as AuthenticatedRequest), {}), select: { type: true }, distinct: ["type"], orderBy: { type: "asc" } });
+    res.json({ types: rows.map((row) => row.type) });
+  } catch (e) { next(e); }
+});
+
+router.post("/", async (req, res, next) => {
+  const parsed = productCreateSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Please fix the highlighted product fields.", fieldErrors: fieldErrors(parsed.error) }); return; }
+  try {
+    const business = businessId(req as AuthenticatedRequest);
+    const { variants = [], notes, ...fields } = parsed.data;
+    const product = await prisma.product.create({
+      data: { ...fields, notes: notes?.trim() || null, businessId: business, variants: { create: variants } },
+      include: { variants: { orderBy: { name: "asc" } } }
+    });
     res.status(201).json({ product });
   } catch (e) { next(e); }
 });
@@ -39,7 +51,7 @@ router.post("/", async (req, res, next) => {
 router.get("/:productId", async (req, res, next) => {
   const id = idOf(req); if (!id) { res.status(400).json({ error: "A valid product ID is required." }); return; }
   try {
-    const product = await prisma.product.findFirst({ where: tenantScope(businessId(req as AuthenticatedRequest), { id }), include: { variants: true, planItems: { include: { plan: true } } } });
+    const product = await prisma.product.findFirst({ where: tenantScope(businessId(req as AuthenticatedRequest), { id }), include: { variants: { orderBy: { name: "asc" } }, planItems: { include: { plan: true } } } });
     if (!product) { res.status(404).json({ error: "Product not found." }); return; }
     res.json({ product });
   } catch (e) { next(e); }
@@ -47,13 +59,21 @@ router.get("/:productId", async (req, res, next) => {
 
 router.patch("/:productId", async (req, res, next) => {
   const id = idOf(req); if (!id) { res.status(400).json({ error: "A valid product ID is required." }); return; }
-  const parsed = productSchema.partial().safeParse(req.body);
-  if (!parsed.success || !Object.keys(parsed.data ?? {}).length) { res.status(400).json({ error: "Provide valid product fields to update.", ...(parsed.success ? {} : { details: parsed.error.flatten() }) }); return; }
+  const parsed = productUpdateSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Please fix the highlighted product fields.", fieldErrors: fieldErrors(parsed.error) }); return; }
+  if (!Object.keys(parsed.data).length) { res.status(400).json({ error: "Provide at least one product field to update." }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
     const existing = await prisma.product.findFirst({ where: tenantScope(business, { id }), select: { id: true } });
     if (!existing) { res.status(404).json({ error: "Product not found." }); return; }
-    const product = await prisma.product.update({ where: { id }, data: { ...parsed.data, ...(parsed.data.notes !== undefined ? { notes: parsed.data.notes.trim() || null } : {}) }, include: { variants: true } });
+    const { variants, notes, ...fields } = parsed.data;
+    const product = await prisma.$transaction(async (tx) => {
+      if (variants) {
+        await tx.productVariant.deleteMany({ where: { productId: id, businessId: business } });
+        if (variants.length) await tx.productVariant.createMany({ data: variants.map((variant) => ({ ...variant, productId: id, businessId: business })) });
+      }
+      return tx.product.update({ where: { id }, data: { ...fields, ...(notes !== undefined ? { notes: notes.trim() || null } : {}) }, include: { variants: { orderBy: { name: "asc" } } } });
+    });
     res.json({ product });
   } catch (e) { next(e); }
 });
@@ -62,10 +82,13 @@ router.delete("/:productId", async (req, res, next) => {
   const id = idOf(req); if (!id) { res.status(400).json({ error: "A valid product ID is required." }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
-    const existing = await prisma.product.findFirst({ where: tenantScope(business, { id }), select: { id: true } });
+    const existing = await prisma.product.findFirst({ where: tenantScope(business, { id }), select: { id: true, _count: { select: { planItems: true, quotationLines: true, subscriptionLines: true, invoiceLines: true } } } });
     if (!existing) { res.status(404).json({ error: "Product not found." }); return; }
+    const links = existing._count;
+    const used = [links.planItems && "plans", links.quotationLines && "quotations", links.subscriptionLines && "subscriptions", links.invoiceLines && "invoices"].filter(Boolean);
+    if (used.length) { res.status(409).json({ error: `This product is used in ${used.join(", ")} and cannot be deleted. Remove it from those records first.` }); return; }
     try { await prisma.product.delete({ where: { id } }); } catch (e) {
-      if (typeof e === "object" && e !== null && "code" in e && e.code === "P2003") { res.status(409).json({ error: "This product is linked to plans, subscriptions or invoices and cannot be deleted." }); return; }
+      if (isFkViolation(e)) { res.status(409).json({ error: "This product is linked to plans, subscriptions or invoices and cannot be deleted." }); return; }
       throw e;
     }
     res.status(204).send();
@@ -75,7 +98,7 @@ router.delete("/:productId", async (req, res, next) => {
 router.post("/:productId/variants", async (req, res, next) => {
   const id = idOf(req); if (!id) { res.status(400).json({ error: "A valid product ID is required." }); return; }
   const parsed = variantSchema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "Invalid variant details.", details: parsed.error.flatten() }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Please fix the highlighted variant fields.", fieldErrors: fieldErrors(parsed.error) }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
     const product = await prisma.product.findFirst({ where: tenantScope(business, { id }), select: { id: true } });

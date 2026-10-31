@@ -23,7 +23,7 @@ NexBill is an active development project. The repository currently includes:
 - React navigation and list views for customers, products, plans, subscriptions, quotations, invoices, payments, pricing rules and reports.
 - PostgreSQL/Prisma migrations and API/frontend CI validation.
 
-The API foundation is substantially ahead of the frontend. The frontend module views are currently read-focused; create/edit workflows still need to be completed across the remaining modules. The repository is not production-ready. Payment gateway adapters and webhooks, invoice PDF/email delivery, customer self-service portal, advanced analytics, provider-backed notifications, deployment configuration and end-to-end validation remain outstanding. Saved tax and discount rules can be applied when creating quotations; tax rates are snapshotted on quotation lines.
+The API foundation is substantially ahead of the frontend. Customers and Products have full create, edit, delete, search and filter workflows in the UI (Products also supports variants, type filtering, sorting and pagination). The remaining module views are currently read-focused; create/edit workflows still need to be completed for them. The repository is not production-ready. Payment gateway adapters and webhooks, invoice PDF/email delivery, customer self-service portal, advanced analytics, provider-backed notifications, deployment configuration and end-to-end validation remain outstanding. Saved tax and discount rules can be applied when creating quotations; tax rates are snapshotted on quotation lines.
 
 ## Technology stack
 
