@@ -126,3 +126,6 @@ button{cursor:pointer}
 .form-two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;padding-top:7px}
 @media(max-width:600px){.customer-page-heading{align-items:flex-start;flex-direction:column}.form-two-col{grid-template-columns:1fr}.customer-modal{padding:19px}.customer-table th,.customer-table td{padding:11px 9px}}
+
+.customer-form select{width:100%;height:40px;border:1px solid #dce2eb;border-radius:8px;padding:0 11px;background:#fff;color:#344054;font:13px "DM Sans",sans-serif}
+.customer-form select:focus{border-color:#5579b5;outline:none;box-shadow:0 0 0 3px #5579b51c}
