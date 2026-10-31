@@ -18,7 +18,8 @@ const createSchema = z.object({
   planId: z.string().min(1),
   validUntil: z.string().datetime().optional().nullable(),
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
-  lines: z.array(lineSchema).min(1).max(100)
+  lines: z.array(lineSchema).min(1).max(100),
+  discount: z.object({ type: z.enum(["PERCENTAGE", "FIXED"]), value: z.number().finite().min(0).max(9999999999.99) }).optional()
 }).strict();
 const patchSchema = z.object({
   validUntil: z.string().datetime().nullable().optional(),
@@ -67,17 +68,23 @@ router.post("/", async (req, res, next) => {
     const products = await prisma.product.findMany({ where: { businessId: business, id: { in: data.lines.map((line) => line.productId) } }, select: { id: true, name: true } });
     if (products.length !== new Set(data.lines.map((line) => line.productId)).size) { res.status(400).json({ error: "One or more products do not belong to the selected workspace." }); return; }
     const productNames = new Map(products.map((product) => [product.id, product.name]));
-    const lineRows = data.lines.map((line) => {
-      const amount = roundMoney(line.quantity * line.unitPrice);
-      return { businessId: business, productId: line.productId, description: productNames.get(line.productId)!, quantity: line.quantity, unitPrice: line.unitPrice, taxRate: line.taxRate, amount };
-    });
-    const subtotal = roundMoney(lineRows.reduce((sum, line) => sum + line.amount, 0));
-    const taxTotal = roundMoney(lineRows.reduce((sum, line) => sum + line.amount * line.taxRate / 100, 0));
+    const pricing = calculatePricing(data.lines, data.discount);
+    const lineRows = pricing.lines.map((line, index) => ({
+      businessId: business,
+      productId: data.lines[index].productId,
+      description: productNames.get(data.lines[index].productId)!,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      taxRate: line.taxRate,
+      amount: line.amount,
+      discountAmount: line.discountAmount
+    }));
+    const { subtotal, discountTotal, taxTotal, total } = pricing;
     const quotation = await prisma.quotation.create({
       data: {
         businessId: business, number: makeNumber(), customerId: customer.id, planId: plan.id,
-        validUntil, notes: data.notes?.trim() || null, subtotal, discountTotal: 0, taxTotal,
-        total: roundMoney(subtotal + taxTotal), lines: { create: lineRows }
+        validUntil, notes: data.notes?.trim() || null, subtotal, discountTotal, taxTotal,
+        total, lines: { create: lineRows }
       },
       include: { customer: true, plan: true, lines: { include: { product: true } } }
     });

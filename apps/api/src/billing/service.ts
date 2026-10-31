@@ -24,9 +24,10 @@ export async function generateDueInvoices(businessId?: string, now = new Date())
       results.push({ subscriptionId: subscription.id, status: "skipped", reason: "already_billed", invoiceId: existing.id });
       continue;
     }
-    const subtotal = money(subscription.lines.reduce((sum, line) => sum + Number(line.amount), 0));
+    const subtotal = money(subscription.lines.reduce((sum, line) => sum + Number(line.amount) + Number(line.discountAmount), 0));
+    const discountTotal = money(subscription.lines.reduce((sum, line) => sum + Number(line.discountAmount), 0));
     const taxTotal = money(subscription.lines.reduce((sum, line) => sum + Number(line.amount) * Number(line.taxRate) / 100, 0));
-    const total = money(subtotal + taxTotal);
+    const total = money(subtotal - discountTotal + taxTotal);
     let invoice: { id: string };
     try {
       invoice = await prisma.invoice.create({

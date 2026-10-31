@@ -8,19 +8,20 @@ NexBill is a web-based platform being developed to help businesses manage custom
 
 ## Current project status
 
-NexBill is under active development. The current implementation includes:
+NexBill is an active development project. The repository currently includes:
 
-- Multi-tenant database foundation with business workspaces and per-business memberships.
-- User registration and login using bcrypt password hashing and JWT authentication.
-- Tenant-context and membership/role authorization middleware.
-- Workspace listing, member listing, invitations, invitation acceptance, role updates and member removal.
-- Customer management API and frontend interface (create, list/search, edit and delete).
-- Initial React dashboard with login, registration and workspace selection.
-- PostgreSQL/Prisma migrations and API health endpoint.
+- Multi-tenant workspaces, memberships, role checks and invitation flows.
+- Registration and login using bcrypt password hashing and JWT authentication.
+- Tenant-scoped customer, product, plan, subscription, quotation and invoice APIs.
+- Product variants and plan-to-product associations.
+- Quotation lifecycle actions and conversion into subscriptions.
+- Subscription lifecycle actions, recurring invoice generation and duplicate-period protection.
+- Invoice confirmation, cancellation and manual payment recording.
+- Percentage and fixed quotation discounts, proportional line allocation and tax-after-discount calculations.
+- Revenue dashboard metrics and upcoming renewal data.
+- PostgreSQL/Prisma migrations and an initial React workspace/customer interface.
 
-**Current focus:** validate the customer management workflow and continue with product, plan and subscription modules.
-
-Product management, quotations, subscription workflows, invoice generation, payment processing, recurring billing and production deployment are not yet complete. Some API module routes are still placeholders.
+The API foundation is substantially ahead of the frontend. The current web interface does not yet expose every backend module, and the repository is not production-ready. Payment gateway integration, refund processing, invoice PDF/email delivery, customer self-service, configurable tax rules, deployment configuration and end-to-end validation remain outstanding.
 
 ## Technology stack
 
@@ -200,6 +201,4 @@ Workspace and customer endpoints require authentication and a valid selected bus
 
 ## Development status and contribution notes
 
-Development is currently taking place on the `architecture/multi-tenant-hardening` branch in [PR #2](https://github.com/NaurasShaji/Odoo-X-Make-a-ton/pull/2).
-
-Before submitting changes, run the relevant API typecheck/tests and frontend build. Keep secrets, local environment files and database credentials out of commits. Do not reset a development database unless you intentionally want to delete its data.
+Changes are maintained on `main`. Before deploying, run the API typecheck, API tests, API build and frontend build against a configured PostgreSQL database. Keep secrets, local environment files and database credentials out of commits. Do not reset a development database unless you intentionally want to delete its data.
