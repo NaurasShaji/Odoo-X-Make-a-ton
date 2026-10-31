@@ -78,7 +78,11 @@ router.post("/:subscriptionId/actions/:action", async (req, res, next) => {
     const next = nextSubscriptionStatus(subscription.status, action);
     if (!next) { res.status(409).json({ error: `Action '${action}' is not allowed from status '${subscription.status}'.` }); return; }
     if (action === "activate" && subscription.startDate > new Date()) { res.status(400).json({ error: "A subscription cannot be activated before its start date." }); return; }
-    const updated = await prisma.subscription.update({ where: { id }, data: { status: next }, include: { customer: true, plan: true, lines: { include: { product: true } } } });
+    if (action === "pause" && !subscription.plan.allowPause) { res.status(409).json({ error: "The selected plan does not allow pausing." }); return; }
+    if (action === "close" && subscription.expiryDate && subscription.expiryDate > new Date() && !subscription.plan.earlyClose) { res.status(409).json({ error: "The selected plan does not allow early closure." }); return; }
+    const changed = await prisma.subscription.updateMany({ where: { id, businessId: business, status: subscription.status }, data: { status: next } });
+    if (changed.count !== 1) { res.status(409).json({ error: "Subscription status changed concurrently. Refresh and retry." }); return; }
+    const updated = await prisma.subscription.findFirst({ where: tenantScope(business, { id }), include: { customer: true, plan: true, lines: { include: { product: true } } } });
     res.json({ subscription: updated });
   } catch (e) { next(e); }
 });
