@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { billingDecision, paymentResult } from "./billing/logic.js";
+import { addBillingPeriod, billingDecision, paymentResult } from "./billing/logic.js";
 import { nextSubscriptionStatus } from "./subscriptions/transitions.js";
+
+
+test("monthly billing clamps dates at the end of shorter months", () => {
+  assert.equal(addBillingPeriod(new Date("2026-01-31T12:00:00.000Z"), "MONTHLY").toISOString(), "2026-02-28T12:00:00.000Z");
+  assert.equal(addBillingPeriod(new Date("2024-01-31T12:00:00.000Z"), "MONTHLY").toISOString(), "2024-02-29T12:00:00.000Z");
+});
+
+test("yearly billing clamps leap day in non-leap years", () => {
+  assert.equal(addBillingPeriod(new Date("2024-02-29T12:00:00.000Z"), "YEARLY").toISOString(), "2025-02-28T12:00:00.000Z");
+});
+
+test("weekly billing preserves UTC time while advancing seven days", () => {
+  assert.equal(addBillingPeriod(new Date("2026-10-31T09:30:00.000Z"), "WEEKLY").toISOString(), "2026-11-07T09:30:00.000Z");
+});
 
 test("billing generation creates the next due period", () => {
   const start = new Date("2026-10-01T00:00:00.000Z");
