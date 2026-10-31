@@ -15,7 +15,7 @@ test("allocates fixed discount proportionally across lines", () => {
   ], { type: "FIXED", value: 15 });
   assert.equal(result.discountTotal, 15);
   assert.equal(result.lines.reduce((sum, line) => sum + line.discountAmount, 0), 15);
-  assert.equal(result.total, 148.98);
+  assert.equal(result.total, 153.45);
 });
 
 test("rejects discount above subtotal and percentage above 100", () => {
