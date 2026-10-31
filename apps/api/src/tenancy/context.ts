@@ -78,3 +78,9 @@ export function tenantScope<T extends object>(businessId: string, where: T = {} 
   if (!businessId.trim()) throw new Error("businessId is required for tenant-scoped queries.");
   return { ...where, businessId };
 }
+
+export function assertSameBusiness(contextBusinessId: string, ...recordBusinessIds: string[]): void {
+  if (!contextBusinessId || recordBusinessIds.some((id) => id !== contextBusinessId)) {
+    throw new Error("Cross-business access is not permitted.");
+  }
+}
