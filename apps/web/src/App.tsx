@@ -357,12 +357,6 @@ function App() {
         ) : page !== "overview" ? (
           <ManagementPage page={page} apiRequest={apiRequest} businessId={selectedBusinessId} />
         ) : (
-                  <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th>Record</th><th>Details</th><th>Status</th><th>Amount</th><th>Date</th><th>Actions</th></tr></thead><tbody>{moduleRows.map((row, index) => <tr key={String(row.id ?? index)}><td><strong>{moduleTitle(row)}</strong></td><td>{moduleSecondary(row) || "—"}</td><td>{String(row.status ?? "—")}</td><td>{row.total !== undefined ? String(row.total) : row.amount !== undefined ? String(row.amount) : row.price !== undefined ? String(row.price) : "—"}</td><td>{row.createdAt || row.dueDate || row.startDate ? new Date(String(row.createdAt ?? row.dueDate ?? row.startDate)).toLocaleDateString() : "—"}</td><td>{moduleRowActions(row)}</td></tr>)}</tbody></table></div>
-                )
-              ) : <div className="empty-customers"><div className="empty-icon">—</div><strong>No records found</strong><span>There are no records in this module yet.</span></div>}
-            </section>
-          </>
-        ) : (
         <>
         <section className="welcome-card"><div><p className="eyebrow">YOUR BUSINESS</p><h2>{selectedWorkspace?.business.name ?? "Your workspace"}</h2><p>Workspace access is active. Use the navigation to manage customers, products, plans, subscriptions, quotations, invoices and payments.</p></div><div className="welcome-icon">✦</div></section>
         <section className="metric-grid"><article className="metric-card"><span className="metric-label">Workspace role</span><strong>{selectedWorkspace?.role ?? "—"}</strong><span className="metric-foot">Your access level</span></article><article className="metric-card"><span className="metric-label">Team members</span><strong>{members.length}</strong><span className="metric-foot">People in this workspace</span></article><article className="metric-card"><span className="metric-label">Workspace status</span><strong className="active-text">Active</strong><span className="metric-foot">Membership verified</span></article></section>
