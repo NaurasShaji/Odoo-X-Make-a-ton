@@ -41,11 +41,11 @@ export async function generateDueInvoices(businessId?: string, now = new Date())
           periodEnd,
           dueDate: periodStart,
           subtotal,
-          discountTotal: 0,
+          discountTotal,
           taxTotal,
           total,
           status: "DRAFT",
-          lines: { create: subscription.lines.map((line) => ({ businessId: subscription.businessId, productId: line.productId, description: `Subscription ${subscription.number}`, quantity: line.quantity, unitPrice: line.unitPrice, taxRate: line.taxRate, amount: line.amount })) }
+          lines: { create: subscription.lines.map((line) => ({ businessId: subscription.businessId, productId: line.productId, description: `Subscription ${subscription.number}`, quantity: line.quantity, unitPrice: line.unitPrice, taxRate: line.taxRate, amount: line.amount, discountAmount: line.discountAmount })) }
         },
         select: { id: true }
       });
