@@ -11,7 +11,8 @@ const lineSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().finite().positive().max(100000),
   unitPrice: money,
-  taxRate: z.number().finite().min(0).max(100)
+  taxRate: z.number().finite().min(0).max(100).optional(),
+  taxRuleId: z.string().min(1).optional()
 }).strict();
 const createSchema = z.object({
   customerId: z.string().min(1),
@@ -19,7 +20,8 @@ const createSchema = z.object({
   validUntil: z.string().datetime().optional().nullable(),
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
   lines: z.array(lineSchema).min(1).max(100),
-  discount: z.object({ type: z.enum(["PERCENTAGE", "FIXED"]), value: z.number().finite().min(0).max(9999999999.99) }).optional()
+  discount: z.object({ type: z.enum(["PERCENTAGE", "FIXED"]), value: z.number().finite().min(0).max(9999999999.99) }).optional(),
+  discountRuleId: z.string().min(1).optional()
 }).strict();
 const patchSchema = z.object({
   validUntil: z.string().datetime().nullable().optional(),
@@ -54,6 +56,7 @@ router.post("/", async (req, res, next) => {
   try {
     const business = businessId(req as AuthenticatedRequest);
     const data = parsed.data;
+    if (data.discount && data.discountRuleId) { res.status(400).json({ error: "Provide either an inline discount or a saved discount rule, not both." }); return; }
     const validUntil = data.validUntil ? new Date(data.validUntil) : null;
     if (validUntil && validUntil <= new Date()) { res.status(400).json({ error: "validUntil must be a future date." }); return; }
     const [customer, plan] = await Promise.all([
@@ -68,7 +71,22 @@ router.post("/", async (req, res, next) => {
     const products = await prisma.product.findMany({ where: { businessId: business, id: { in: data.lines.map((line) => line.productId) } }, select: { id: true, name: true } });
     if (products.length !== new Set(data.lines.map((line) => line.productId)).size) { res.status(400).json({ error: "One or more products do not belong to the selected workspace." }); return; }
     const productNames = new Map(products.map((product) => [product.id, product.name]));
-    const pricing = calculatePricing(data.lines, data.discount);
+    const taxRuleIds = [...new Set(data.lines.flatMap((line) => line.taxRuleId ? [line.taxRuleId] : []))];
+    const taxRules = taxRuleIds.length ? await prisma.taxRule.findMany({ where: { businessId: business, id: { in: taxRuleIds }, active: true } }) : [];
+    if (taxRules.length !== taxRuleIds.length) { res.status(400).json({ error: "One or more selected tax rules are inactive or do not belong to this workspace." }); return; }
+    const taxRates = new Map(taxRules.map((rule) => [rule.id, Number(rule.rate)]));
+    const pricingLines = data.lines.map((line) => ({
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      taxRate: line.taxRuleId ? taxRates.get(line.taxRuleId)! : line.taxRate ?? 0
+    }));
+    let discount = data.discount;
+    if (data.discountRuleId) {
+      const rule = await prisma.discountRule.findFirst({ where: tenantScope(business, { id: data.discountRuleId, active: true }) });
+      if (!rule) { res.status(400).json({ error: "The selected discount rule is inactive or does not belong to this workspace." }); return; }
+      discount = { type: rule.type as "PERCENTAGE" | "FIXED", value: Number(rule.value) };
+    }
+    const pricing = calculatePricing(pricingLines, discount);
     const lineRows = pricing.lines.map((line, index) => ({
       businessId: business,
       productId: data.lines[index].productId,
