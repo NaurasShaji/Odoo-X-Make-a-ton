@@ -71,7 +71,7 @@ NexBill will support four primary user categories.
 
 ### 3.1 Administrator
 
-The administrator has overall control of the business workspace.
+The administrator has overall control of one business workspace. A user may belong to multiple workspaces, with a separate role in each.
 
 Responsibilities:
 
@@ -147,8 +147,18 @@ The system should:
 
 The following decisions remain subject to confirmation in later requirements and architecture reviews:
 
-- Whether the deployment will support multiple independent business tenants.
+- Deployment supports both single-business self-hosting (one workspace) and multi-tenant SaaS (multiple isolated workspaces).
 - The detailed permission matrix for staff and finance users.
 - Supported payment gateway providers.
 - Tax jurisdictions and compliance requirements.
 - Currency and localization requirements.
+
+## 7. Tenant and Deployment Requirements
+
+- Every business operates inside a Business/workspace boundary.
+- A self-hosted deployment starts with one default workspace; tenant scoping remains enabled.
+- SaaS deployments may host multiple businesses, and users may hold memberships in multiple businesses.
+- Roles are assigned per membership, not globally per user.
+- Customer, catalog, subscription and invoice records must be scoped to the active business.
+- API authorization must verify membership server-side; client-provided business IDs and roles are never authoritative.
+- Existing records are assigned to a default workspace during the multi-tenant schema migration.
