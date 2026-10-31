@@ -14,11 +14,19 @@ enum UserRole {
   CUSTOMER
 }
 
+enum BillingPeriod {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
 enum SubscriptionStatus {
   DRAFT
   QUOTATION
   CONFIRMED
   ACTIVE
+  PAUSED
   CLOSED
 }
 
@@ -26,7 +34,17 @@ enum InvoiceStatus {
   DRAFT
   CONFIRMED
   PAID
+  PARTIALLY_PAID
+  OVERDUE
   CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
 }
 
 model User {
@@ -62,7 +80,8 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  variants         ProductVariant[]
+  variants          ProductVariant[]
+  planItems         PlanItem[]
   subscriptionLines SubscriptionLine[]
   invoiceLines      InvoiceLine[]
 }
@@ -79,21 +98,35 @@ model ProductVariant {
 }
 
 model Plan {
-  id             String   @id @default(cuid())
+  id             String        @id @default(cuid())
   name           String
-  price          Decimal  @db.Decimal(12, 2)
-  billingPeriod  String
-  minQuantity    Int      @default(1)
+  price          Decimal       @db.Decimal(12, 2)
+  billingPeriod  BillingPeriod
+  minQuantity    Int           @default(1)
   availableFrom  DateTime?
   availableUntil DateTime?
-  autoClose      Boolean  @default(false)
-  earlyClose     Boolean  @default(false)
-  allowPause     Boolean  @default(false)
-  autoRenew      Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  autoClose      Boolean       @default(false)
+  earlyClose     Boolean       @default(false)
+  allowPause     Boolean       @default(false)
+  autoRenew      Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  subscriptions Subscription[]
+  items          PlanItem[]
+  subscriptions  Subscription[]
+}
+
+model PlanItem {
+  id        String  @id @default(cuid())
+  planId    String
+  productId String
+  quantity  Decimal @default(1) @db.Decimal(12, 2)
+
+  plan    Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([planId, productId])
+  @@index([productId])
 }
 
 model Subscription {
@@ -136,13 +169,16 @@ model Invoice {
   number           String        @unique
   customerId       String
   subscriptionId   String?
+  recurringKey     String?       @unique
   billingPeriodKey String?
+  periodStart      DateTime?
+  periodEnd        DateTime?
   dueDate          DateTime
   status           InvoiceStatus @default(DRAFT)
   subtotal         Decimal       @db.Decimal(12, 2)
   discountTotal    Decimal       @db.Decimal(12, 2)
   taxTotal         Decimal       @db.Decimal(12, 2)
-  total             Decimal       @db.Decimal(12, 2)
+  total            Decimal       @db.Decimal(12, 2)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -151,9 +187,9 @@ model Invoice {
   lines        InvoiceLine[]
   payments     Payment[]
 
-  @@unique([subscriptionId, billingPeriodKey])
   @@index([customerId, status])
   @@index([dueDate, status])
+  @@index([subscriptionId, billingPeriodKey])
 }
 
 model InvoiceLine {
@@ -173,15 +209,22 @@ model InvoiceLine {
 }
 
 model Payment {
-  id        String   @id @default(cuid())
-  invoiceId String
-  method    String
-  amount    Decimal  @db.Decimal(12, 2)
-  paidAt    DateTime
-  note      String?
-  createdAt DateTime @default(now())
+  id                    String        @id @default(cuid())
+  invoiceId             String
+  method                String
+  status                PaymentStatus @default(PENDING)
+  amount                Decimal       @db.Decimal(12, 2)
+  provider              String?
+  providerTransactionId String?
+  idempotencyKey        String?       @unique
+  paidAt                DateTime?
+  note                  String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
+  @@unique([provider, providerTransactionId])
+  @@index([invoiceId, status])
   @@index([invoiceId, paidAt])
 }
