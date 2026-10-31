@@ -42,7 +42,7 @@ function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
-  const [page, setPage] = useState<"overview" | "customers" | "products" | "plans" | "subscriptions" | "quotations" | "invoices" | "payments" | "reports">("overview");
+  const [page, setPage] = useState<"overview" | "customers" | "products" | "plans" | "subscriptions" | "quotations" | "invoices" | "payments" | "reports" | "taxes" | "discounts">("overview");
   const [moduleRows, setModuleRows] = useState<Record<string, unknown>[]>([]);
   const [moduleBusy, setModuleBusy] = useState(false);
   const [moduleError, setModuleError] = useState("");
@@ -126,7 +126,9 @@ function App() {
     subscriptions: { endpoint: "/api/v1/subscriptions", key: "subscriptions", title: "Subscriptions", description: "Review subscription lifecycle and customer assignments." },
     quotations: { endpoint: "/api/v1/quotations", key: "quotations", title: "Quotations", description: "Track quotations, totals and conversion status." },
     invoices: { endpoint: "/api/v1/invoices", key: "invoices", title: "Invoices", description: "Review generated invoices and outstanding balances." },
-    payments: { endpoint: "/api/v1/payments", key: "payments", title: "Payments", description: "Review recorded payments and refunds." }
+    payments: { endpoint: "/api/v1/payments", key: "payments", title: "Payments", description: "Review recorded payments and refunds." },
+    taxes: { endpoint: "/api/v1/pricing-rules/taxes", key: "taxRules", title: "Tax rules", description: "Manage workspace tax rates and the default tax rule." },
+    discounts: { endpoint: "/api/v1/pricing-rules/discounts", key: "discountRules", title: "Discount rules", description: "Manage reusable percentage and fixed discounts." }
   } as const;
 
   async function loadModule() {
@@ -296,7 +298,7 @@ function App() {
           <span className="workspace-avatar">{selectedWorkspace?.business.name.slice(0, 1).toUpperCase() ?? "W"}</span>
           <span className="workspace-name">{selectedWorkspace?.business.name ?? "Loading workspace…"}</span>
         </div>
-        <nav className="side-nav"><button className={`nav-item ${page === "overview" ? "active" : ""}`} onClick={() => setPage("overview")}>Overview</button><button className={`nav-item ${page === "customers" ? "active" : ""}`} onClick={() => setPage("customers")}>Customers</button><button className={`nav-item ${page === "products" ? "active" : ""}`} onClick={() => setPage("products")}>Products</button><button className={`nav-item ${page === "plans" ? "active" : ""}`} onClick={() => setPage("plans")}>Plans</button><button className={`nav-item ${page === "subscriptions" ? "active" : ""}`} onClick={() => setPage("subscriptions")}>Subscriptions</button><button className={`nav-item ${page === "quotations" ? "active" : ""}`} onClick={() => setPage("quotations")}>Quotations</button><button className={`nav-item ${page === "invoices" ? "active" : ""}`} onClick={() => setPage("invoices")}>Invoices</button><button className={`nav-item ${page === "payments" ? "active" : ""}`} onClick={() => setPage("payments")}>Payments</button><button className={`nav-item ${page === "reports" ? "active" : ""}`} onClick={() => setPage("reports")}>Reports</button></nav>
+        <nav className="side-nav"><button className={`nav-item ${page === "overview" ? "active" : ""}`} onClick={() => setPage("overview")}>Overview</button><button className={`nav-item ${page === "customers" ? "active" : ""}`} onClick={() => setPage("customers")}>Customers</button><button className={`nav-item ${page === "products" ? "active" : ""}`} onClick={() => setPage("products")}>Products</button><button className={`nav-item ${page === "plans" ? "active" : ""}`} onClick={() => setPage("plans")}>Plans</button><button className={`nav-item ${page === "subscriptions" ? "active" : ""}`} onClick={() => setPage("subscriptions")}>Subscriptions</button><button className={`nav-item ${page === "quotations" ? "active" : ""}`} onClick={() => setPage("quotations")}>Quotations</button><button className={`nav-item ${page === "invoices" ? "active" : ""}`} onClick={() => setPage("invoices")}>Invoices</button><button className={`nav-item ${page === "payments" ? "active" : ""}`} onClick={() => setPage("payments")}>Payments</button><button className={`nav-item ${page === "reports" ? "active" : ""}`} onClick={() => setPage("reports")}>Reports</button><button className={`nav-item ${page === "taxes" ? "active" : ""}`} onClick={() => setPage("taxes")}>Tax rules</button><button className={`nav-item ${page === "discounts" ? "active" : ""}`} onClick={() => setPage("discounts")}>Discount rules</button></nav>
         <div className="sidebar-bottom"><div className="user-avatar">{userEmail.slice(0, 1).toUpperCase()}</div><div className="user-details"><strong>{userEmail}</strong><span>{selectedWorkspace?.role ?? "Member"}</span></div><button className="logout-button" onClick={signOut} title="Sign out" aria-label="Sign out">↗</button></div>
       </aside>
       <main className="main-content">
@@ -329,7 +331,7 @@ function App() {
           </>
         ) : (
         <>
-        <section className="welcome-card"><div><p className="eyebrow">YOUR BUSINESS</p><h2>{selectedWorkspace?.business.name ?? "Your workspace"}</h2><p>Workspace access is active. Your billing modules will appear here as they are implemented.</p></div><div className="welcome-icon">✦</div></section>
+        <section className="welcome-card"><div><p className="eyebrow">YOUR BUSINESS</p><h2>{selectedWorkspace?.business.name ?? "Your workspace"}</h2><p>Workspace access is active. Use the navigation to manage customers, products, plans, subscriptions, quotations, invoices and payments.</p></div><div className="welcome-icon">✦</div></section>
         <section className="metric-grid"><article className="metric-card"><span className="metric-label">Workspace role</span><strong>{selectedWorkspace?.role ?? "—"}</strong><span className="metric-foot">Your access level</span></article><article className="metric-card"><span className="metric-label">Team members</span><strong>{members.length}</strong><span className="metric-foot">People in this workspace</span></article><article className="metric-card"><span className="metric-label">Workspace status</span><strong className="active-text">Active</strong><span className="metric-foot">Membership verified</span></article></section>
         <section className="content-card"><div className="section-heading"><div><p className="eyebrow muted">ACCESS CONTROL</p><h2>Workspace members</h2></div><span className="count-badge">{members.length} members</span></div>
           {members.length ? <div className="member-list">{members.map((member) => <div className="member-row" key={member.userId}><div className="member-avatar">{member.user.email.slice(0, 1).toUpperCase()}</div><div className="member-info"><strong>{member.user.email}</strong><span>Joined {new Date(member.createdAt).toLocaleDateString()}</span></div><span className={`role-badge ${member.role.toLowerCase()}`}>{member.role}</span></div>)}</div> : <p className="empty-state">No workspace members found.</p>}
