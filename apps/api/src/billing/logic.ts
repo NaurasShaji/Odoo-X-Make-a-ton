@@ -4,10 +4,18 @@ export type BillingDecision =
 
 export function addBillingPeriod(date: Date, period: "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY"): Date {
   const next = new Date(date);
-  if (period === "WEEKLY") next.setDate(next.getDate() + 7);
-  else if (period === "MONTHLY") next.setMonth(next.getMonth() + 1);
-  else if (period === "QUARTERLY") next.setMonth(next.getMonth() + 3);
-  else next.setFullYear(next.getFullYear() + 1);
+  if (period === "WEEKLY") {
+    next.setUTCDate(next.getUTCDate() + 7);
+    return next;
+  }
+
+  const originalDay = next.getUTCDate();
+  const monthsToAdd = period === "MONTHLY" ? 1 : period === "QUARTERLY" ? 3 : 12;
+  const targetMonth = next.getUTCMonth() + monthsToAdd;
+  next.setUTCDate(1);
+  next.setUTCMonth(targetMonth);
+  const lastDayOfTargetMonth = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(originalDay, lastDayOfTargetMonth));
   return next;
 }
 
