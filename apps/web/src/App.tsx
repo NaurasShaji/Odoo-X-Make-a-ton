@@ -149,6 +149,52 @@ function App() {
     if (token && selectedBusinessId && page !== "overview" && page !== "customers" && page !== "products") void loadModule();
   }, [token, selectedBusinessId, page]);
 
+
+  async function editModuleRecord(row?: Record<string, unknown>) {
+    if (!["plans", "taxes", "discounts"].includes(page)) return;
+    const ask=(label:string,value:unknown="")=>window.prompt(label,value==null?"":String(value));
+    const name=ask("Name",row?.name); if(name===null||!name.trim()) return;
+    let payload:Record<string,unknown>={name:name.trim()};
+    if(page==="plans"){
+      const price=ask("Price",row?.price??""); if(price===null)return;
+      const billingPeriod=ask("Billing period: WEEKLY, MONTHLY, QUARTERLY or YEARLY",row?.billingPeriod??"MONTHLY"); if(billingPeriod===null)return;
+      const minQuantity=ask("Minimum quantity",row?.minQuantity??1); if(minQuantity===null)return;
+      const availableFrom=ask("Available from (YYYY-MM-DD, optional)",row?.availableFrom?String(row.availableFrom).slice(0,10):""); if(availableFrom===null)return;
+      const availableUntil=ask("Available until (YYYY-MM-DD, optional)",row?.availableUntil?String(row.availableUntil).slice(0,10):""); if(availableUntil===null)return;
+      const flag=(label:string,old:unknown)=>window.confirm(label+"? Current: "+(old?"Yes":"No")+" (OK = Yes)");
+      payload={...payload,price:Number(price),billingPeriod,minQuantity:Number(minQuantity),availableFrom:availableFrom?new Date(availableFrom+"T00:00:00.000Z").toISOString():null,availableUntil:availableUntil?new Date(availableUntil+"T23:59:59.000Z").toISOString():null,autoRenew:flag("Automatically renew",row?.autoRenew),autoClose:flag("Automatically close after expiry",row?.autoClose),allowPause:flag("Allow pausing",row?.allowPause),earlyClose:flag("Allow early closure",row?.earlyClose)};
+    } else if(page==="taxes"){
+      const rate=ask("Tax rate (%)",row?.rate??"");if(rate===null)return;
+      payload={...payload,rate:Number(rate),isDefault:window.confirm("Set as default tax rule?"),active:window.confirm("Keep active?")};
+    } else {
+      const type=ask("Discount type: PERCENTAGE or FIXED",row?.type??"PERCENTAGE");if(type===null)return;
+      const value=ask("Discount value",row?.value??"");if(value===null)return;
+      payload={...payload,type,value:Number(value),active:window.confirm("Keep active?")};
+    }
+    const base=page==="plans"?"/api/v1/plans":page==="taxes"?"/api/v1/pricing-rules/taxes":"/api/v1/pricing-rules/discounts";
+    try{await apiRequest(row?base+"/"+String(row.id):base,{method:row?"PATCH":"POST",body:JSON.stringify(payload)},selectedBusinessId);setNotice(row?"Record updated.":"Record created.");await loadModule();}
+    catch(cause){setModuleError(cause instanceof Error?cause.message:"Could not save record.");}
+  }
+  async function moduleDelete(row:Record<string,unknown>){
+    if(!window.confirm("Delete "+moduleTitle(row)+"?"))return;
+    const base=page==="plans"?"/api/v1/plans":page==="taxes"?"/api/v1/pricing-rules/taxes":"/api/v1/pricing-rules/discounts";
+    try{await apiRequest(base+"/"+String(row.id),{method:"DELETE"},selectedBusinessId);setNotice("Record deleted.");await loadModule();}
+    catch(cause){setModuleError(cause instanceof Error?cause.message:"Could not delete record.");}
+  }
+  async function moduleAction(path:string,body?:Record<string,unknown>,headers?:Record<string,string>){
+    try{await apiRequest(path,{method:"POST",...(body?{body:JSON.stringify(body)}:{}),...(headers?{headers}:{})},selectedBusinessId);setNotice("Action completed.");await loadModule();}
+    catch(cause){setModuleError(cause instanceof Error?cause.message:"Action failed.");}
+  }
+  function moduleRowActions(row:Record<string,unknown>){
+    const id=String(row.id??"");
+    if(["plans","taxes","discounts"].includes(page))return <><button className="table-action" onClick={()=>void editModuleRecord(row)}>Edit</button><button className="table-action danger-text" onClick={()=>void moduleDelete(row)}>Delete</button></>;
+    if(page==="subscriptions"){const map:Record<string,string[]>={DRAFT:["confirm"],CONFIRMED:["activate","close"],ACTIVE:["pause","close"],PAUSED:["resume","close"]};return (map[String(row.status)]??[]).map(a=><button className="table-action" key={a} onClick={()=>void moduleAction("/api/v1/subscriptions/"+id+"/actions/"+a)}>{a}</button>);}
+    if(page==="quotations"){const map:Record<string,string[]>={DRAFT:["send"],SENT:["accept","reject","expire"]};return <>{(map[String(row.status)]??[]).map(a=><button className="table-action" key={a} onClick={()=>void moduleAction("/api/v1/quotations/"+id+"/actions/"+a)}>{a}</button>)}{row.status==="ACCEPTED"&&<button className="table-action" onClick={()=>{const d=window.prompt("Subscription start date (YYYY-MM-DD)");if(d)void moduleAction("/api/v1/quotations/"+id+"/convert",{startDate:new Date(d+"T00:00:00.000Z").toISOString()});}}>Convert</button>}</>;}
+    if(page==="invoices")return <>{row.status==="DRAFT"&&<button className="table-action" onClick={()=>void moduleAction("/api/v1/invoices/"+id+"/confirm")}>Confirm</button>}{!["PAID","CANCELLED","PARTIALLY_PAID"].includes(String(row.status))&&<button className="table-action danger-text" onClick={()=>void moduleAction("/api/v1/invoices/"+id+"/cancel")}>Cancel</button>}{!["DRAFT","PAID","CANCELLED"].includes(String(row.status))&&<button className="table-action" onClick={()=>{const amount=window.prompt("Payment amount");const method=window.prompt("Payment method");if(amount&&method)void moduleAction("/api/v1/invoices/"+id+"/payments",{amount:Number(amount),method,note:""},{"Idempotency-Key":"invoice-"+id+"-"+Date.now()});}}>Record payment</button>}</>;
+    if(page==="payments"&&["SUCCEEDED","PARTIALLY_REFUNDED"].includes(String(row.status)))return <button className="table-action" onClick={()=>{const amount=window.prompt("Refund amount");if(amount)void moduleAction("/api/v1/payments/"+id+"/refunds",{amount:Number(amount),reason:window.prompt("Reason (optional)")??""},{"Idempotency-Key":"refund-"+id+"-"+Date.now()});}}>Refund</button>;
+    return "—";
+  }
+
   function moduleTitle(row: Record<string, unknown>) {
     return String(row.name ?? row.number ?? row.id ?? "Record");
   }
@@ -309,14 +355,14 @@ function App() {
           selectedBusinessId ? <ProductsPage key={selectedBusinessId} apiRequest={apiRequest} businessId={selectedBusinessId} /> : <p className="empty-state">Loading workspace…</p>
         ) : page !== "overview" ? (
           <>
-            <header className="section-heading customer-page-heading"><div><p className="eyebrow muted">BUSINESS OPERATIONS</p><h2>{page === "reports" ? "Reports & analytics" : moduleConfig[page].title}</h2><p className="muted helper">{page === "reports" ? "Revenue metrics and upcoming renewal activity." : moduleConfig[page].description}</p></div><button className="outline-button" onClick={() => void loadModule()}>Refresh</button></header>
+            <header className="section-heading customer-page-heading"><div><p className="eyebrow muted">BUSINESS OPERATIONS</p><h2>{page === "reports" ? "Reports & analytics" : moduleConfig[page].title}</h2><p className="muted helper">{page === "reports" ? "Revenue metrics and upcoming renewal activity." : moduleConfig[page].description}</p></div><div className="topbar-right">{["plans","taxes","discounts"].includes(page)&&<button className="primary-button add-customer-button" onClick={()=>void editModuleRecord()}>+ Add {page==="plans"?"plan":page==="taxes"?"tax rule":"discount rule"}</button>}{page==="invoices"&&<button className="outline-button" onClick={()=>void moduleAction("/api/v1/invoices/billing/run")}>Run billing</button>}<button className="outline-button" onClick={() => void loadModule()}>Refresh</button></div></header>
             <section className="content-card">
               {moduleError && <div className="alert error" role="alert">{moduleError}</div>}
               {moduleBusy ? <p className="empty-state">Loading records…</p> : moduleRows.length ? (
                 page === "reports" ? (
                   <div className="metric-grid">{moduleRows.map((row) => <article className="metric-card" key={String(row.id ?? row.number)}><span className="metric-label">{String(row.label ?? row.recordType ?? "Metric")}</span><strong>{String(row.value ?? row.number ?? row.name ?? "—")}</strong><span className="metric-foot">{row.expiryDate ? `Expires ${new Date(String(row.expiryDate)).toLocaleDateString()}` : row.customer ? String((row.customer as { name?: string }).name ?? "") : ""}</span></article>)}</div>
                 ) : (
-                  <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th>Record</th><th>Details</th><th>Status</th><th>Amount</th><th>Date</th></tr></thead><tbody>{moduleRows.map((row, index) => <tr key={String(row.id ?? index)}><td><strong>{moduleTitle(row)}</strong></td><td>{moduleSecondary(row) || "—"}</td><td>{String(row.status ?? "—")}</td><td>{row.total !== undefined ? String(row.total) : row.amount !== undefined ? String(row.amount) : row.price !== undefined ? String(row.price) : "—"}</td><td>{row.createdAt || row.dueDate || row.startDate ? new Date(String(row.createdAt ?? row.dueDate ?? row.startDate)).toLocaleDateString() : "—"}</td></tr>)}</tbody></table></div>
+                  <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th>Record</th><th>Details</th><th>Status</th><th>Amount</th><th>Date</th><th>Actions</th></tr></thead><tbody>{moduleRows.map((row, index) => <tr key={String(row.id ?? index)}><td><strong>{moduleTitle(row)}</strong></td><td>{moduleSecondary(row) || "—"}</td><td>{String(row.status ?? "—")}</td><td>{row.total !== undefined ? String(row.total) : row.amount !== undefined ? String(row.amount) : row.price !== undefined ? String(row.price) : "—"}</td><td>{row.createdAt || row.dueDate || row.startDate ? new Date(String(row.createdAt ?? row.dueDate ?? row.startDate)).toLocaleDateString() : "—"}</td><td>{moduleRowActions(row)}</td></tr>)}</tbody></table></div>
                 )
               ) : <div className="empty-customers"><div className="empty-icon">—</div><strong>No records found</strong><span>There are no records in this module yet.</span></div>}
             </section>
