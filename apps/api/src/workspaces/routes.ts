@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { Request, Router } from "express";
+import { Router } from "express";
+import type { Request } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { AuthenticatedRequest, requireTenantRole, resolveTenantContext } from "../tenancy/context.js";
