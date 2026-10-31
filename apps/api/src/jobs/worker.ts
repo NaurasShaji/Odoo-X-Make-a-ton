@@ -1,11 +1,17 @@
 import { Worker } from "bullmq";
-import { redisConnection } from "./queues.js";
+import { billingQueue, renewalQueue, redisConnection } from "./queues.js";
+import { generateDueInvoices } from "../billing/service.js";
+import { prisma } from "../db/prisma.js";
 
 export const billingWorker = new Worker(
   "billing",
   async (job) => {
-    console.log(`Billing job received: ${job.name}`);
-    // Billing Guard and invoice generation will be implemented here.
+    if (job.name === "generate-invoices") {
+      const result = await generateDueInvoices(typeof job.data?.businessId === "string" ? job.data.businessId : undefined);
+      console.log("Billing Guard run:", result);
+      return result;
+    }
+    throw new Error(`Unknown billing job: ${job.name}`);
   },
   { connection: redisConnection }
 );
@@ -13,8 +19,20 @@ export const billingWorker = new Worker(
 export const renewalWorker = new Worker(
   "renewals",
   async (job) => {
-    console.log(`Renewal job received: ${job.name}`);
-    // Renewal detection and notification will be implemented here.
+    if (job.name !== "check-renewals") throw new Error(`Unknown renewal job: ${job.name}`);
+    const now = new Date();
+    const horizon = new Date(now);
+    horizon.setDate(horizon.getDate() + 7);
+    const subscriptions = await prisma.subscription.findMany({
+      where: { ...(typeof job.data?.businessId === "string" ? { businessId: job.data.businessId } : {}), status: "ACTIVE", expiryDate: { gte: now, lte: horizon } },
+      select: { id: true, number: true, businessId: true, customerId: true, expiryDate: true }
+    });
+    return { checked: subscriptions.length, subscriptions };
   },
   { connection: redisConnection }
 );
+
+void Promise.all([
+  billingQueue.upsertJobScheduler("recurring-billing", { every: 60 * 60 * 1000 }, { name: "generate-invoices" }),
+  renewalQueue.upsertJobScheduler("renewal-check", { every: 6 * 60 * 60 * 1000 }, { name: "check-renewals" })
+]).catch((error) => console.error("Unable to schedule background jobs", error));
