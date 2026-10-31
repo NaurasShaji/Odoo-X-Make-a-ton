@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { API_BASE, createApiRequest } from "./api";
 import ProductsPage from "./products/ProductsPage";
+import ManagementPage from "./ManagementPage";
 
 type Workspace = {
   businessId: string;
@@ -354,14 +355,8 @@ function App() {
         ) : page === "products" ? (
           selectedBusinessId ? <ProductsPage key={selectedBusinessId} apiRequest={apiRequest} businessId={selectedBusinessId} /> : <p className="empty-state">Loading workspace…</p>
         ) : page !== "overview" ? (
-          <>
-            <header className="section-heading customer-page-heading"><div><p className="eyebrow muted">BUSINESS OPERATIONS</p><h2>{page === "reports" ? "Reports & analytics" : moduleConfig[page].title}</h2><p className="muted helper">{page === "reports" ? "Revenue metrics and upcoming renewal activity." : moduleConfig[page].description}</p></div><div className="topbar-right">{["plans","taxes","discounts"].includes(page)&&<button className="primary-button add-customer-button" onClick={()=>void editModuleRecord()}>+ Add {page==="plans"?"plan":page==="taxes"?"tax rule":"discount rule"}</button>}{page==="invoices"&&<button className="outline-button" onClick={()=>void moduleAction("/api/v1/invoices/billing/run")}>Run billing</button>}<button className="outline-button" onClick={() => void loadModule()}>Refresh</button></div></header>
-            <section className="content-card">
-              {moduleError && <div className="alert error" role="alert">{moduleError}</div>}
-              {moduleBusy ? <p className="empty-state">Loading records…</p> : moduleRows.length ? (
-                page === "reports" ? (
-                  <div className="metric-grid">{moduleRows.map((row) => <article className="metric-card" key={String(row.id ?? row.number)}><span className="metric-label">{String(row.label ?? row.recordType ?? "Metric")}</span><strong>{String(row.value ?? row.number ?? row.name ?? "—")}</strong><span className="metric-foot">{row.expiryDate ? `Expires ${new Date(String(row.expiryDate)).toLocaleDateString()}` : row.customer ? String((row.customer as { name?: string }).name ?? "") : ""}</span></article>)}</div>
-                ) : (
+          <ManagementPage page={page} apiRequest={apiRequest} businessId={selectedBusinessId} />
+        ) : (
                   <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th>Record</th><th>Details</th><th>Status</th><th>Amount</th><th>Date</th><th>Actions</th></tr></thead><tbody>{moduleRows.map((row, index) => <tr key={String(row.id ?? index)}><td><strong>{moduleTitle(row)}</strong></td><td>{moduleSecondary(row) || "—"}</td><td>{String(row.status ?? "—")}</td><td>{row.total !== undefined ? String(row.total) : row.amount !== undefined ? String(row.amount) : row.price !== undefined ? String(row.price) : "—"}</td><td>{row.createdAt || row.dueDate || row.startDate ? new Date(String(row.createdAt ?? row.dueDate ?? row.startDate)).toLocaleDateString() : "—"}</td><td>{moduleRowActions(row)}</td></tr>)}</tbody></table></div>
                 )
               ) : <div className="empty-customers"><div className="empty-icon">—</div><strong>No records found</strong><span>There are no records in this module yet.</span></div>}

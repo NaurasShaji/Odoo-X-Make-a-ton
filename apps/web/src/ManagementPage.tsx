@@ -57,7 +57,17 @@ export default function ManagementPage({page,apiRequest,businessId}:Props){
    else if(page==="subscriptions")body={customerId:form.customerId,planId:form.planId,startDate:new Date(form.startDate+"T00:00:00.000Z").toISOString(),expiryDate:form.expiryDate?new Date(form.expiryDate+"T23:59:59.000Z").toISOString():null,lines:form.lines.map((l:Row)=>({productId:l.productId,quantity:Number(l.quantity),unitPrice:Number(l.unitPrice),taxRate:Number(l.taxRate)}))};
    else if(page==="quotations")body={customerId:form.customerId,planId:form.planId,validUntil:form.validUntil?new Date(form.validUntil+"T23:59:59.000Z").toISOString():null,notes:form.notes,discountRuleId:form.discountRuleId||undefined,lines:form.lines.map((l:Row)=>({productId:l.productId,quantity:Number(l.quantity),unitPrice:Number(l.unitPrice),taxRate:Number(l.taxRate),...(l.taxRuleId?{taxRuleId:l.taxRuleId}:{})}))};
    const result=await request(editing?path+"/"+editing.id:path,editing?"PATCH":"POST",body);
-   if(page==="plans"&&!editing){const plan=(result as any).plan;if(plan?.id)for(const item of form.items??[])if(item.productId)await request(path+"/"+plan.id+"/items","POST",{productId:item.productId,quantity:Number(item.quantity)});}
+   if(page==="plans"){
+    const planId=editing?.id??result.plan?.id;
+    const existing=(editing?.items??[]) as Row[];
+    const desired=(form.items??[]).filter((item:Row)=>item.productId);
+    for(const item of existing){
+     const next=desired.find((x:Row)=>x.id===item.id);
+     if(!next)await request(path+"/"+planId+"/items/"+item.id,"DELETE");
+     else if(Number(next.quantity)!==Number(item.quantity))await request(path+"/"+planId+"/items/"+item.id,"PATCH",{quantity:Number(next.quantity)});
+    }
+    for(const item of desired.filter((x:Row)=>!x.id))await request(path+"/"+planId+"/items","POST",{productId:item.productId,quantity:Number(item.quantity)});
+   }
    setModal(false);setNotice(editing?"Changes saved.":"Record created.");await load();
   }catch(e){setError(e instanceof Error?e.message:"Could not save record.");}finally{setSaving(false);}
  };
