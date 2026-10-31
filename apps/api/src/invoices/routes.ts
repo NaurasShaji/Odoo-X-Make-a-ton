@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { generateDueInvoices } from "../billing/service.js";
+import { paymentResult } from "../billing/logic.js";
 import { AuthenticatedRequest, requireTenantRole, tenantScope } from "../tenancy/context.js";
 
 const router = Router();
@@ -27,10 +28,8 @@ router.get("/", async (req, res, next) => {
 });
 
 router.post("/billing/run", async (req, res, next) => {
-  try {
-    const result = await generateDueInvoices(businessId(req as AuthenticatedRequest));
-    res.json({ message: "Billing run completed.", ...result });
-  } catch (e) { next(e); }
+  try { res.json({ message: "Billing run completed.", ...(await generateDueInvoices(businessId(req as AuthenticatedRequest))) }); }
+  catch (e) { next(e); }
 });
 
 router.get("/:invoiceId", async (req, res, next) => {
@@ -50,8 +49,7 @@ router.post("/:invoiceId/confirm", async (req, res, next) => {
     const invoice = await prisma.invoice.findFirst({ where: tenantScope(business, { id }) });
     if (!invoice) { res.status(404).json({ error: "Invoice not found." }); return; }
     if (invoice.status !== "DRAFT") { res.status(409).json({ error: `Invoice cannot be confirmed from status '${invoice.status}'.` }); return; }
-    const updated = await prisma.invoice.update({ where: { id }, data: { status: "CONFIRMED" } });
-    res.json({ invoice: updated });
+    res.json({ invoice: await prisma.invoice.update({ where: { id }, data: { status: "CONFIRMED" } }) });
   } catch (e) { next(e); }
 });
 
@@ -62,8 +60,7 @@ router.post("/:invoiceId/cancel", async (req, res, next) => {
     const invoice = await prisma.invoice.findFirst({ where: tenantScope(business, { id }), include: { payments: { where: { status: "SUCCEEDED" }, select: { amount: true } } } });
     if (!invoice) { res.status(404).json({ error: "Invoice not found." }); return; }
     if (["PAID", "CANCELLED", "PARTIALLY_PAID"].includes(invoice.status) || invoice.payments.length > 0) { res.status(409).json({ error: `Invoice cannot be cancelled from status '${invoice.status}' once payment has been recorded.` }); return; }
-    const updated = await prisma.invoice.update({ where: { id }, data: { status: "CANCELLED" } });
-    res.json({ invoice: updated });
+    res.json({ invoice: await prisma.invoice.update({ where: { id }, data: { status: "CANCELLED" } }) });
   } catch (e) { next(e); }
 });
 
@@ -78,13 +75,10 @@ router.post("/:invoiceId/payments", async (req, res, next) => {
       if (!invoice) throw Object.assign(new Error("Invoice not found."), { statusCode: 404 });
       if (["CANCELLED", "PAID"].includes(invoice.status)) throw Object.assign(new Error(`Invoice cannot accept payment in status '${invoice.status}'.`), { statusCode: 409 });
       const paid = invoice.payments.filter((p) => p.status === "SUCCEEDED").reduce((sum, p) => sum + Number(p.amount), 0);
-      const balance = Math.max(0, Number(invoice.total) - paid);
-      if (parsed.data.amount > balance) throw Object.assign(new Error(`Payment exceeds outstanding balance of ${balance.toFixed(2)}.`), { statusCode: 400 });
+      const result = paymentResult(Number(invoice.total), paid, parsed.data.amount);
       const payment = await tx.payment.create({ data: { businessId: business, invoiceId: invoice.id, method: parsed.data.method, status: "SUCCEEDED", amount: parsed.data.amount, paidAt: new Date(), note: parsed.data.note?.trim() || null } });
-      const newPaid = paid + parsed.data.amount;
-      const status = newPaid >= Number(invoice.total) ? "PAID" : "PARTIALLY_PAID";
-      const updatedInvoice = await tx.invoice.update({ where: { id: invoice.id }, data: { status } });
-      return { payment, invoice: updatedInvoice, balance: Math.max(0, Number(invoice.total) - newPaid) };
+      const updatedInvoice = await tx.invoice.update({ where: { id: invoice.id }, data: { status: result.status } });
+      return { payment, invoice: updatedInvoice, balance: result.balance };
     });
     res.status(201).json(result);
   } catch (e) {
