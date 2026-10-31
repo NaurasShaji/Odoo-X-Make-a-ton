@@ -87,7 +87,7 @@ model Membership {
   updatedAt  DateTime @updatedAt
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@index([businessId, email])
+  @@index([businessId, role])
   @@index([userId])
   @@index([businessId, role])
 }
