@@ -40,13 +40,15 @@ router.post("/", async (req, res, next) => {
     if (expiry && expiry <= start) { res.status(400).json({ error: "expiryDate must be after startDate." }); return; }
     const [customer, plan] = await Promise.all([
       prisma.customer.findFirst({ where: tenantScope(business, { id: data.customerId }), select: { id: true } }),
-      prisma.plan.findFirst({ where: tenantScope(business, { id: data.planId }), select: { id: true, minQuantity: true, availableFrom: true, availableUntil: true } })
+      prisma.plan.findFirst({ where: tenantScope(business, { id: data.planId }), select: { id: true, minQuantity: true, availableFrom: true, availableUntil: true, items: { select: { productId: true } } } })
     ]);
     if (!customer) { res.status(404).json({ error: "Customer not found." }); return; }
     if (!plan) { res.status(404).json({ error: "Plan not found." }); return; }
     if (plan.availableFrom && start < plan.availableFrom) { res.status(400).json({ error: "Subscription starts before the plan becomes available." }); return; }
     if (plan.availableUntil && start > plan.availableUntil) { res.status(400).json({ error: "Subscription starts after the plan is no longer available." }); return; }
     if (data.lines.some((line) => line.quantity < plan.minQuantity)) { res.status(400).json({ error: `Each subscription line must meet the plan minimum quantity of ${plan.minQuantity}.` }); return; }
+    const planProductIds = new Set(plan.items.map((item) => item.productId));
+    if (data.lines.some((line) => !planProductIds.has(line.productId))) { res.status(400).json({ error: "Every subscription product must be associated with the selected plan." }); return; }
     const products = await prisma.product.findMany({ where: { businessId: business, id: { in: data.lines.map((line) => line.productId) } }, select: { id: true } });
     if (products.length !== new Set(data.lines.map((line) => line.productId)).size) { res.status(400).json({ error: "One or more products do not belong to the selected workspace." }); return; }
     const number = `SUB-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
