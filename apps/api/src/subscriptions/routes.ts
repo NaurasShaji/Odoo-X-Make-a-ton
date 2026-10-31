@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { AuthenticatedRequest, requireTenantRole, tenantScope } from "../tenancy/context.js";
+import { nextSubscriptionStatus, type SubscriptionAction } from "./transitions.js";
 
 const router = Router();
 const lineSchema = z.object({ productId: z.string().min(1), quantity: z.number().finite().positive().max(100000), unitPrice: z.number().finite().min(0).max(9999999999.99), taxRate: z.number().finite().min(0).max(100) }).strict();
@@ -10,18 +11,6 @@ const idOf = (req: Request) => typeof req.params.subscriptionId === "string" ? r
 const businessId = (req: AuthenticatedRequest) => req.auth?.tenant?.businessId ?? (() => { throw new Error("Verified business context is missing."); })();
 
 router.use(requireTenantRole("ADMIN", "STAFF", "FINANCE"));
-
-function nextStatusAction(status: string, action: string): string | null {
-  const transitions: Record<string, Record<string, string>> = {
-    DRAFT: { quotation: "QUOTATION", confirm: "CONFIRMED" },
-    QUOTATION: { confirm: "CONFIRMED", close: "CLOSED" },
-    CONFIRMED: { activate: "ACTIVE", close: "CLOSED" },
-    ACTIVE: { pause: "PAUSED", close: "CLOSED" },
-    PAUSED: { resume: "ACTIVE", close: "CLOSED" },
-    CLOSED: {}
-  };
-  return transitions[status]?.[action] ?? null;
-}
 
 router.get("/", async (req, res, next) => {
   try {
@@ -76,16 +65,18 @@ router.get("/:subscriptionId", async (req, res, next) => {
 });
 
 router.post("/:subscriptionId/actions/:action", async (req, res, next) => {
-  const id = idOf(req); const action = typeof req.params.action === "string" ? req.params.action.toLowerCase() : null;
-  if (!id || !action) { res.status(400).json({ error: "Valid subscription ID and action are required." }); return; }
+  const id = idOf(req); const actionParam = typeof req.params.action === "string" ? req.params.action.toLowerCase() : null;
+  if (!id || !actionParam) { res.status(400).json({ error: "Valid subscription ID and action are required." }); return; }
+  const action = actionParam as SubscriptionAction;
+  if (!["quotation", "confirm", "activate", "pause", "resume", "close"].includes(action)) { res.status(400).json({ error: `Unknown subscription action '${actionParam}'.` }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
     const subscription = await prisma.subscription.findFirst({ where: tenantScope(business, { id }), include: { plan: true } });
     if (!subscription) { res.status(404).json({ error: "Subscription not found." }); return; }
-    const next = nextStatusAction(subscription.status, action);
+    const next = nextSubscriptionStatus(subscription.status, action);
     if (!next) { res.status(409).json({ error: `Action '${action}' is not allowed from status '${subscription.status}'.` }); return; }
     if (action === "activate" && subscription.startDate > new Date()) { res.status(400).json({ error: "A subscription cannot be activated before its start date." }); return; }
-    const updated = await prisma.subscription.update({ where: { id }, data: { status: next as any }, include: { customer: true, plan: true, lines: { include: { product: true } } } });
+    const updated = await prisma.subscription.update({ where: { id }, data: { status: next }, include: { customer: true, plan: true, lines: { include: { product: true } } } });
     res.json({ subscription: updated });
   } catch (e) { next(e); }
 });
