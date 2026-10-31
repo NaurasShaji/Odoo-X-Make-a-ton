@@ -16,12 +16,12 @@ router.get("/summary", async (req, res, next) => {
     const [activeSubscriptions, invoices, payments, upcomingRenewals] = await Promise.all([
       prisma.subscription.findMany({ where: tenantScope(business, { status: SubscriptionStatus.ACTIVE }), select: { id: true, expiryDate: true, plan: { select: { price: true, billingPeriod: true } } } }),
       prisma.invoice.findMany({ where: tenantScope(business), select: { id: true, status: true, total: true, dueDate: true, payments: { where: { status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] } }, select: { amount: true, status: true, refunds: { where: { status: "SUCCEEDED" }, select: { amount: true, status: true } } } } } }),
-      prisma.payment.findMany({ where: { businessId: business, status: "SUCCEEDED" }, select: { amount: true } }),
+      prisma.payment.findMany({ where: { businessId: business, status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] } }, select: { amount: true, status: true, refunds: { where: { status: "SUCCEEDED" }, select: { amount: true, status: true } } } }),
       prisma.subscription.findMany({ where: tenantScope(business, { status: SubscriptionStatus.ACTIVE, expiryDate: { gte: now, lte: new Date(now.getTime() + 7 * 86400000) } }), include: { customer: true, plan: true }, orderBy: { expiryDate: "asc" }, take: 10 })
     ]);
     const monthlyMultiplier: Record<BillingPeriod, number> = { WEEKLY: 52 / 12, MONTHLY: 1, QUARTERLY: 1 / 3, YEARLY: 1 / 12 };
     const mrr = activeSubscriptions.reduce((sum, sub) => sum + Number(sub.plan.price) * monthlyMultiplier[sub.plan.billingPeriod], 0);
-    const collected = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const collected = calculateNetPaid(payments.map((payment) => ({ amount: Number(payment.amount), status: payment.status, refunds: payment.refunds.map((refund) => ({ amount: Number(refund.amount), status: refund.status })) })));
     const receivableStatuses = new Set<InvoiceStatus>([InvoiceStatus.CONFIRMED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE]);
     const outstanding = invoices.filter((invoice) => receivableStatuses.has(invoice.status)).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - calculateNetPaid(invoice.payments.map((payment) => ({ amount: Number(payment.amount), status: payment.status, refunds: payment.refunds.map((refund) => ({ amount: Number(refund.amount), status: refund.status })) })))), 0);
     const overdueStatuses = new Set<InvoiceStatus>([InvoiceStatus.CONFIRMED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE]);

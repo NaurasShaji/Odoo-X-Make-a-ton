@@ -68,9 +68,15 @@ router.post("/:invoiceId/cancel", async (req, res, next) => {
 router.post("/:invoiceId/payments", async (req, res, next) => {
   const id = idOf(req); if (!id) { res.status(400).json({ error: "A valid invoice ID is required." }); return; }
   const parsed = paymentSchema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "Invalid payment details.", details: parsed.error.flatten() }); return; }
+  const key = req.header("idempotency-key")?.trim();
+  if (!parsed.success || !key || key.length > 128) { res.status(400).json({ error: !key || key.length > 128 ? "A valid Idempotency-Key header is required." : "Invalid payment details.", ...(parsed.success ? {} : { details: parsed.error.flatten() }) }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
+    const existingPayment = await prisma.payment.findUnique({ where: { idempotencyKey: key } });
+    if (existingPayment) {
+      if (existingPayment.businessId !== business || existingPayment.invoiceId !== id || Number(existingPayment.amount) !== parsed.data.amount) { res.status(409).json({ error: "The idempotency key has already been used for a different payment." }); return; }
+      res.status(200).json({ payment: existingPayment, replayed: true }); return;
+    }
     const result = await prisma.$transaction(async (tx) => {
       const invoice = await tx.invoice.findFirst({ where: tenantScope(business, { id }), include: { payments: { include: { refunds: { where: { status: "SUCCEEDED" } } } } } });
       if (!invoice) throw Object.assign(new Error("Invoice not found."), { statusCode: 404 });
@@ -78,7 +84,7 @@ router.post("/:invoiceId/payments", async (req, res, next) => {
       const paid = calculateNetPaid(invoice.payments.map((p) => ({ amount: Number(p.amount), status: p.status, refunds: p.refunds.map((refund) => ({ amount: Number(refund.amount), status: refund.status })) })));
       const result = calculateInvoiceSettlement(Number(invoice.total), paid + parsed.data.amount, invoice.dueDate);
       if (parsed.data.amount > Math.max(0, Number((Number(invoice.total) - paid).toFixed(2)))) throw Object.assign(new Error("Payment exceeds outstanding balance."), { statusCode: 409 });
-      const payment = await tx.payment.create({ data: { businessId: business, invoiceId: invoice.id, method: parsed.data.method, status: "SUCCEEDED", amount: parsed.data.amount, paidAt: new Date(), note: parsed.data.note?.trim() || null } });
+      const payment = await tx.payment.create({ data: { businessId: business, invoiceId: invoice.id, method: parsed.data.method, status: "SUCCEEDED", amount: parsed.data.amount, idempotencyKey: key, paidAt: new Date(), note: parsed.data.note?.trim() || null } });
       const updatedInvoice = await tx.invoice.update({ where: { id: invoice.id }, data: { status: result.status } });
       return { payment, invoice: updatedInvoice, balance: result.balance };
     });
