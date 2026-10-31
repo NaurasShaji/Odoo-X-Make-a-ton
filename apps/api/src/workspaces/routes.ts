@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { Router } from "express";
+import { Request, Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { AuthenticatedRequest, requireTenantRole, resolveTenantContext } from "../tenancy/context.js";
@@ -12,6 +12,12 @@ const inviteSchema = z.object({
 const acceptSchema = z.object({ token: z.string().min(32).max(256) });
 const roleSchema = z.object({ role: z.enum(["STAFF", "FINANCE", "CUSTOMER", "ADMIN"]) });
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+
+function routeMemberId(req: Request): string {
+  const value = req.params.userId;
+  if (typeof value !== "string" || !value) throw new Error("A valid member user ID is required.");
+  return value;
+}
 
 function userId(req: AuthenticatedRequest): string {
   if (!req.auth?.userId) throw new Error("Authenticated user context is missing.");
@@ -162,12 +168,12 @@ router.patch("/members/:userId/role", requireTenantRole("ADMIN"), async (req, re
   }
   try {
     const tenant = (req as AuthenticatedRequest).auth!.tenant!;
-    if (req.params.userId === tenant.userId) {
+    if (routeMemberId(req) === tenant.userId) {
       res.status(400).json({ error: "You cannot change your own role." });
       return;
     }
     const target = await prisma.membership.findUnique({
-      where: { businessId_userId: { businessId: tenant.businessId, userId: req.params.userId } },
+      where: { businessId_userId: { businessId: tenant.businessId, userId: routeMemberId(req) } },
       select: { role: true }
     });
     if (!target) {
@@ -182,7 +188,7 @@ router.patch("/members/:userId/role", requireTenantRole("ADMIN"), async (req, re
       }
     }
     const updated = await prisma.membership.update({
-      where: { businessId_userId: { businessId: tenant.businessId, userId: req.params.userId } },
+      where: { businessId_userId: { businessId: tenant.businessId, userId: routeMemberId(req) } },
       data: { role: parsed.data.role },
       select: { userId: true, role: true }
     });
