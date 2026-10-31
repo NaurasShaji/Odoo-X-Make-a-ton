@@ -42,7 +42,10 @@ function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
-  const [page, setPage] = useState<"overview" | "customers">("overview");
+  const [page, setPage] = useState<"overview" | "customers" | "products" | "plans" | "subscriptions" | "quotations" | "invoices" | "payments" | "reports">("overview");
+  const [moduleRows, setModuleRows] = useState<Record<string, unknown>[]>([]);
+  const [moduleBusy, setModuleBusy] = useState(false);
+  const [moduleError, setModuleError] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerBusy, setCustomerBusy] = useState(false);
@@ -116,6 +119,53 @@ function App() {
   useEffect(() => {
     if (token && selectedBusinessId && page === "customers") void loadCustomers();
   }, [token, selectedBusinessId, page]);
+
+  const moduleConfig = {
+    products: { endpoint: "/api/v1/products", key: "products", title: "Products", description: "Manage your billable products and variants." },
+    plans: { endpoint: "/api/v1/plans", key: "plans", title: "Subscription plans", description: "Manage recurring plans, billing periods and plan items." },
+    subscriptions: { endpoint: "/api/v1/subscriptions", key: "subscriptions", title: "Subscriptions", description: "Review subscription lifecycle and customer assignments." },
+    quotations: { endpoint: "/api/v1/quotations", key: "quotations", title: "Quotations", description: "Track quotations, totals and conversion status." },
+    invoices: { endpoint: "/api/v1/invoices", key: "invoices", title: "Invoices", description: "Review generated invoices and outstanding balances." },
+    payments: { endpoint: "/api/v1/payments", key: "payments", title: "Payments", description: "Review recorded payments and refunds." }
+  } as const;
+
+  async function loadModule() {
+    if (!selectedBusinessId || page === "overview" || page === "customers") return;
+    setModuleBusy(true);
+    setModuleError("");
+    try {
+      if (page === "reports") {
+        const data = await apiRequest<{ metrics: Record<string, unknown>; upcomingRenewals: Record<string, unknown>[] }>("/api/v1/dashboard/summary", {}, selectedBusinessId);
+        setModuleRows([
+          ...Object.entries(data.metrics ?? {}).map(([label, value]) => ({ id: label, label: label.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`), value })),
+          ...(data.upcomingRenewals ?? []).map((item) => ({ ...item, recordType: "Upcoming renewal" }))
+        ]);
+      } else {
+        const config = moduleConfig[page];
+        const data = await apiRequest<Record<string, unknown>>(`${config.endpoint}?pageSize=100`, {}, selectedBusinessId);
+        setModuleRows((data[config.key] as Record<string, unknown>[]) ?? []);
+      }
+    } catch (cause) {
+      setModuleError(cause instanceof Error ? cause.message : "Could not load this module.");
+      setModuleRows([]);
+    } finally {
+      setModuleBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (token && selectedBusinessId && page !== "overview" && page !== "customers") void loadModule();
+  }, [token, selectedBusinessId, page]);
+
+  function moduleTitle(row: Record<string, unknown>) {
+    return String(row.name ?? row.number ?? row.id ?? "Record");
+  }
+
+  function moduleSecondary(row: Record<string, unknown>) {
+    const customer = row.customer as { name?: string } | undefined;
+    const plan = row.plan as { name?: string } | undefined;
+    return customer?.name ?? plan?.name ?? String(row.type ?? row.method ?? row.recordType ?? "");
+  }
 
   function openCustomer(customer?: Customer) {
     setEditingCustomerId(customer?.id ?? null);
@@ -246,7 +296,7 @@ function App() {
           <span className="workspace-avatar">{selectedWorkspace?.business.name.slice(0, 1).toUpperCase() ?? "W"}</span>
           <span className="workspace-name">{selectedWorkspace?.business.name ?? "Loading workspace…"}</span>
         </div>
-        <nav className="side-nav"><button className={`nav-item ${page === "overview" ? "active" : ""}`} onClick={() => setPage("overview")}>Overview</button><button className={`nav-item ${page === "customers" ? "active" : ""}`} onClick={() => setPage("customers")}>Customers</button><span className="nav-item disabled">Products & plans <small>Coming soon</small></span><span className="nav-item disabled">Subscriptions <small>Coming soon</small></span><span className="nav-item disabled">Invoices <small>Coming soon</small></span></nav>
+        <nav className="side-nav"><button className={`nav-item ${page === "overview" ? "active" : ""}`} onClick={() => setPage("overview")}>Overview</button><button className={`nav-item ${page === "customers" ? "active" : ""}`} onClick={() => setPage("customers")}>Customers</button><button className={`nav-item ${page === "products" ? "active" : ""}`} onClick={() => setPage("products")}>Products</button><button className={`nav-item ${page === "plans" ? "active" : ""}`} onClick={() => setPage("plans")}>Plans</button><button className={`nav-item ${page === "subscriptions" ? "active" : ""}`} onClick={() => setPage("subscriptions")}>Subscriptions</button><button className={`nav-item ${page === "quotations" ? "active" : ""}`} onClick={() => setPage("quotations")}>Quotations</button><button className={`nav-item ${page === "invoices" ? "active" : ""}`} onClick={() => setPage("invoices")}>Invoices</button><button className={`nav-item ${page === "payments" ? "active" : ""}`} onClick={() => setPage("payments")}>Payments</button><button className={`nav-item ${page === "reports" ? "active" : ""}`} onClick={() => setPage("reports")}>Reports</button></nav>
         <div className="sidebar-bottom"><div className="user-avatar">{userEmail.slice(0, 1).toUpperCase()}</div><div className="user-details"><strong>{userEmail}</strong><span>{selectedWorkspace?.role ?? "Member"}</span></div><button className="logout-button" onClick={signOut} title="Sign out" aria-label="Sign out">↗</button></div>
       </aside>
       <main className="main-content">
@@ -262,6 +312,20 @@ function App() {
               {customerBusy ? <p className="empty-state">Loading customers…</p> : customers.length ? <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th>Customer</th><th>Contact</th><th>Company</th><th>Added</th><th>Actions</th></tr></thead><tbody>{customers.map((customer) => <tr key={customer.id}><td><strong>{customer.name}</strong></td><td>{customer.email ?? "—"}<small>{customer.phone ?? ""}</small></td><td>{customer.companyName ?? "—"}</td><td>{new Date(customer.createdAt).toLocaleDateString()}</td><td><button className="table-action" onClick={() => openCustomer(customer)}>Edit</button><button className="table-action danger-text" onClick={() => void deleteCustomer(customer)}>Delete</button></td></tr>)}</tbody></table></div> : <div className="empty-customers"><div className="empty-icon">＋</div><strong>No customers yet</strong><span>Add your first customer to start managing billing relationships.</span><button className="primary-button add-customer-button" onClick={() => openCustomer()}>Add customer</button></div>}
             </section>
             {customerModal && <div className="modal-backdrop" role="presentation"><section className="customer-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><div className="modal-heading"><div><p className="eyebrow muted">{editingCustomerId ? "CUSTOMER DETAILS" : "NEW RECORD"}</p><h2 id="customer-modal-title">{editingCustomerId ? "Edit customer" : "Add customer"}</h2></div><button className="modal-close" onClick={() => setCustomerModal(false)} aria-label="Close">×</button></div><form className="customer-form" onSubmit={saveCustomer}><label>Customer name *<input required maxLength={160} value={customerForm.name} onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })} /></label><div className="form-two-col"><label>Email<input type="email" maxLength={254} value={customerForm.email} onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })} /></label><label>Phone<input maxLength={40} value={customerForm.phone} onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })} /></label></div><label>Company name<input maxLength={160} value={customerForm.companyName} onChange={(e) => setCustomerForm({ ...customerForm, companyName: e.target.value })} /></label><label>Address<textarea rows={2} maxLength={1000} value={customerForm.address} onChange={(e) => setCustomerForm({ ...customerForm, address: e.target.value })} /></label><label>Notes<textarea rows={3} maxLength={2000} value={customerForm.notes} onChange={(e) => setCustomerForm({ ...customerForm, notes: e.target.value })} /></label>{customerError && <div className="alert error">{customerError}</div>}<div className="modal-actions"><button type="button" className="outline-button" onClick={() => setCustomerModal(false)}>Cancel</button><button className="primary-button add-customer-button" type="submit" disabled={customerBusy}>{customerBusy ? "Saving…" : editingCustomerId ? "Save changes" : "Create customer"}</button></div></form></section></div>}
+          </>
+        ) : page !== "overview" ? (
+          <>
+            <header className="section-heading customer-page-heading"><div><p className="eyebrow muted">BUSINESS OPERATIONS</p><h2>{page === "reports" ? "Reports & analytics" : moduleConfig[page].title}</h2><p className="muted helper">{page === "reports" ? "Revenue metrics and upcoming renewal activity." : moduleConfig[page].description}</p></div><button className="outline-button" onClick={() => void loadModule()}>Refresh</button></header>
+            <section className="content-card">
+              {moduleError && <div className="alert error" role="alert">{moduleError}</div>}
+              {moduleBusy ? <p className="empty-state">Loading records…</p> : moduleRows.length ? (
+                page === "reports" ? (
+                  <div className="metric-grid">{moduleRows.map((row) => <article className="metric-card" key={String(row.id ?? row.number)}><span className="metric-label">{String(row.label ?? row.recordType ?? "Metric")}</span><strong>{String(row.value ?? row.number ?? row.name ?? "—")}</strong><span className="metric-foot">{row.expiryDate ? `Expires ${new Date(String(row.expiryDate)).toLocaleDateString()}` : row.customer ? String((row.customer as { name?: string }).name ?? "") : ""}</span></article>)}</div>
+                ) : (
+                  <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th>Record</th><th>Details</th><th>Status</th><th>Amount</th><th>Date</th></tr></thead><tbody>{moduleRows.map((row, index) => <tr key={String(row.id ?? index)}><td><strong>{moduleTitle(row)}</strong></td><td>{moduleSecondary(row) || "—"}</td><td>{String(row.status ?? "—")}</td><td>{row.total !== undefined ? String(row.total) : row.amount !== undefined ? String(row.amount) : row.price !== undefined ? String(row.price) : "—"}</td><td>{row.createdAt || row.dueDate || row.startDate ? new Date(String(row.createdAt ?? row.dueDate ?? row.startDate)).toLocaleDateString() : "—"}</td></tr>)}</tbody></table></div>
+                )
+              ) : <div className="empty-customers"><div className="empty-icon">—</div><strong>No records found</strong><span>There are no records in this module yet.</span></div>}
+            </section>
           </>
         ) : (
         <>
