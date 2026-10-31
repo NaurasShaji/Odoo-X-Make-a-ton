@@ -61,6 +61,7 @@ model User {
   updatedAt    DateTime     @updatedAt
   memberships  Membership[]
   customers    Customer[]
+  invitationsCreated BusinessInvitation[] @relation("InvitationCreator")
 }
 
 model Business {
@@ -75,6 +76,7 @@ model Business {
   plans         Plan[]
   subscriptions Subscription[]
   invoices      Invoice[]
+  invitations   BusinessInvitation[]
 }
 
 model Membership {
@@ -291,4 +293,22 @@ model Refund {
   updatedAt        DateTime     @updatedAt
   payment          Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   @@index([paymentId, status])
+}
+
+
+model BusinessInvitation {
+  id         String   @id @default(cuid())
+  businessId String
+  email      String
+  role       UserRole
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  invitedById String
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invitedBy  User     @relation("InvitationCreator", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([businessId, email, acceptedAt])
+  @@index([expiresAt])
 }
