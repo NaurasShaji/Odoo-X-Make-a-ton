@@ -1,0 +1,16 @@
+{
+  "name": "nexbill",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace @nexbill/api run dev",
+    "dev:web": "npm --workspace @nexbill/web run dev",
+    "build:api": "npm --workspace @nexbill/api run build",
+    "build:web": "npm --workspace @nexbill/web run build",
+    "typecheck:api": "npm --workspace @nexbill/api run typecheck"
+  }
+}
