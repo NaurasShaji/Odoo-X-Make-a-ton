@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import ProductsPage from "./ProductsPage";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
@@ -42,7 +43,7 @@ function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
-  const [page, setPage] = useState<"overview" | "customers">("overview");
+  const [page, setPage] = useState<"overview" | "customers" | "products">("overview");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerBusy, setCustomerBusy] = useState(false);
@@ -246,14 +247,16 @@ function App() {
           <span className="workspace-avatar">{selectedWorkspace?.business.name.slice(0, 1).toUpperCase() ?? "W"}</span>
           <span className="workspace-name">{selectedWorkspace?.business.name ?? "Loading workspace…"}</span>
         </div>
-        <nav className="side-nav"><button className={`nav-item ${page === "overview" ? "active" : ""}`} onClick={() => setPage("overview")}>Overview</button><button className={`nav-item ${page === "customers" ? "active" : ""}`} onClick={() => setPage("customers")}>Customers</button><span className="nav-item disabled">Products & plans <small>Coming soon</small></span><span className="nav-item disabled">Subscriptions <small>Coming soon</small></span><span className="nav-item disabled">Invoices <small>Coming soon</small></span></nav>
+        <nav className="side-nav"><button className={`nav-item ${page === "overview" ? "active" : ""}`} onClick={() => setPage("overview")}>Overview</button><button className={`nav-item ${page === "customers" ? "active" : ""}`} onClick={() => setPage("customers")}>Customers</button><button className={`nav-item ${page === "products" ? "active" : ""}`} onClick={() => setPage("products")}>Products</button><span className="nav-item disabled">Plans <small>Coming soon</small></span><span className="nav-item disabled">Subscriptions <small>Coming soon</small></span><span className="nav-item disabled">Invoices <small>Coming soon</small></span></nav>
         <div className="sidebar-bottom"><div className="user-avatar">{userEmail.slice(0, 1).toUpperCase()}</div><div className="user-details"><strong>{userEmail}</strong><span>{selectedWorkspace?.role ?? "Member"}</span></div><button className="logout-button" onClick={signOut} title="Sign out" aria-label="Sign out">↗</button></div>
       </aside>
       <main className="main-content">
         <header className="topbar"><div><p className="eyebrow muted">WORKSPACE OVERVIEW</p><h1>Good to see you</h1></div><div className="topbar-right"><span className="status-pill"><i /> API connected</span><button className="outline-button" onClick={signOut}>Sign out</button></div></header>
         {error && <div className="alert error page-alert" role="alert">{error}</div>}
         {notice && <div className="alert success page-alert">{notice}</div>}
-        {page === "customers" ? (
+        {page === "products" ? (
+          <ProductsPage token={token} businessId={selectedBusinessId} />
+        ) : page === "customers" ? (
           <>
             <header className="section-heading customer-page-heading"><div><p className="eyebrow muted">RELATIONSHIP MANAGEMENT</p><h2>Customers</h2><p className="muted helper">Manage the people and businesses you bill.</p></div><button className="primary-button add-customer-button" onClick={() => openCustomer()}>+ Add customer</button></header>
             <section className="content-card">
