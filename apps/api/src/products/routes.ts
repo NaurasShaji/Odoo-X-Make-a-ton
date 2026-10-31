@@ -5,13 +5,7 @@ import { AuthenticatedRequest, requireTenantRole, tenantScope } from "../tenancy
 
 const router = Router();
 const money = z.number().finite().min(0).max(9999999999.99);
-const productSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  type: z.string().trim().min(1).max(60),
-  salesPrice: money,
-  costPrice: money,
-  notes: z.string().trim().max(2000).optional().or(z.literal(""))
-}).strict();
+const productSchema = z.object({ name: z.string().trim().min(1).max(160), type: z.string().trim().min(1).max(60), salesPrice: money, costPrice: money, notes: z.string().trim().max(2000).optional().or(z.literal("")) }).strict();
 const variantSchema = z.object({ name: z.string().trim().min(1).max(120), priceAddOn: money }).strict();
 const businessId = (req: AuthenticatedRequest) => req.auth?.tenant?.businessId ?? (() => { throw new Error("Verified business context is missing."); })();
 const idOf = (req: Request) => typeof req.params.productId === "string" ? req.params.productId : null;
@@ -98,7 +92,7 @@ router.patch("/:productId/variants/:variantId", async (req, res, next) => {
   if (!parsed.success || !Object.keys(parsed.data ?? {}).length) { res.status(400).json({ error: "Provide valid variant fields to update." }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
-    const existing = await prisma.productVariant.findFirst({ where: { id: variantId, productId, businessId } });
+    const existing = await prisma.productVariant.findFirst({ where: { id: variantId, productId, businessId: business } });
     if (!existing) { res.status(404).json({ error: "Variant not found." }); return; }
     const variant = await prisma.productVariant.update({ where: { id: variantId }, data: parsed.data });
     res.json({ variant });
@@ -110,7 +104,7 @@ router.delete("/:productId/variants/:variantId", async (req, res, next) => {
   if (!productId || !variantId) { res.status(400).json({ error: "Valid product and variant IDs are required." }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
-    const existing = await prisma.productVariant.findFirst({ where: { id: variantId, productId, businessId }, select: { id: true } });
+    const existing = await prisma.productVariant.findFirst({ where: { id: variantId, productId, businessId: business }, select: { id: true } });
     if (!existing) { res.status(404).json({ error: "Variant not found." }); return; }
     await prisma.productVariant.delete({ where: { id: variantId } });
     res.status(204).send();
