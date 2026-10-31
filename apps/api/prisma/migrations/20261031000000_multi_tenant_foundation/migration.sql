@@ -81,3 +81,45 @@ ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_businessId_fkey"
   FOREIGN KEY ("businessId") REFERENCES "Business"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_businessId_fkey"
   FOREIGN KEY ("businessId") REFERENCES "Business"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "ProductVariant" ADD COLUMN "businessId" TEXT;
+UPDATE "ProductVariant" v SET "businessId" = p."businessId" FROM "Product" p WHERE p."id" = v."productId";
+ALTER TABLE "PlanItem" ADD COLUMN "businessId" TEXT;
+UPDATE "PlanItem" i SET "businessId" = p."businessId" FROM "Plan" p WHERE p."id" = i."planId";
+ALTER TABLE "SubscriptionLine" ADD COLUMN "businessId" TEXT;
+UPDATE "SubscriptionLine" l SET "businessId" = s."businessId" FROM "Subscription" s WHERE s."id" = l."subscriptionId";
+ALTER TABLE "InvoiceLine" ADD COLUMN "businessId" TEXT;
+UPDATE "InvoiceLine" l SET "businessId" = i."businessId" FROM "Invoice" i WHERE i."id" = l."invoiceId";
+ALTER TABLE "Payment" ADD COLUMN "businessId" TEXT;
+UPDATE "Payment" p SET "businessId" = i."businessId" FROM "Invoice" i WHERE i."id" = p."invoiceId";
+
+ALTER TABLE "ProductVariant" ALTER COLUMN "businessId" SET NOT NULL;
+ALTER TABLE "PlanItem" ALTER COLUMN "businessId" SET NOT NULL;
+ALTER TABLE "SubscriptionLine" ALTER COLUMN "businessId" SET NOT NULL;
+ALTER TABLE "InvoiceLine" ALTER COLUMN "businessId" SET NOT NULL;
+ALTER TABLE "Payment" ALTER COLUMN "businessId" SET NOT NULL;
+
+ALTER TABLE "ProductVariant" ADD CONSTRAINT "ProductVariant_productId_businessId_fkey"
+  FOREIGN KEY ("productId", "businessId") REFERENCES "Product"("id", "businessId") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "PlanItem" ADD CONSTRAINT "PlanItem_planId_businessId_fkey"
+  FOREIGN KEY ("planId", "businessId") REFERENCES "Plan"("id", "businessId") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "PlanItem" ADD CONSTRAINT "PlanItem_productId_businessId_fkey"
+  FOREIGN KEY ("productId", "businessId") REFERENCES "Product"("id", "businessId") ON UPDATE CASCADE;
+ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_customerId_businessId_fkey"
+  FOREIGN KEY ("customerId", "businessId") REFERENCES "Customer"("id", "businessId") ON UPDATE CASCADE;
+ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_planId_businessId_fkey"
+  FOREIGN KEY ("planId", "businessId") REFERENCES "Plan"("id", "businessId") ON UPDATE CASCADE;
+ALTER TABLE "SubscriptionLine" ADD CONSTRAINT "SubscriptionLine_subscriptionId_businessId_fkey"
+  FOREIGN KEY ("subscriptionId", "businessId") REFERENCES "Subscription"("id", "businessId") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "SubscriptionLine" ADD CONSTRAINT "SubscriptionLine_productId_businessId_fkey"
+  FOREIGN KEY ("productId", "businessId") REFERENCES "Product"("id", "businessId") ON UPDATE CASCADE;
+ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_customerId_businessId_fkey"
+  FOREIGN KEY ("customerId", "businessId") REFERENCES "Customer"("id", "businessId") ON UPDATE CASCADE;
+ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_subscriptionId_businessId_fkey"
+  FOREIGN KEY ("subscriptionId", "businessId") REFERENCES "Subscription"("id", "businessId") ON UPDATE CASCADE;
+ALTER TABLE "InvoiceLine" ADD CONSTRAINT "InvoiceLine_invoiceId_businessId_fkey"
+  FOREIGN KEY ("invoiceId", "businessId") REFERENCES "Invoice"("id", "businessId") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "InvoiceLine" ADD CONSTRAINT "InvoiceLine_productId_businessId_fkey"
+  FOREIGN KEY ("productId", "businessId") REFERENCES "Product"("id", "businessId") ON UPDATE CASCADE;
+ALTER TABLE "Payment" ADD CONSTRAINT "Payment_invoiceId_businessId_fkey"
+  FOREIGN KEY ("invoiceId", "businessId") REFERENCES "Invoice"("id", "businessId") ON UPDATE CASCADE;
