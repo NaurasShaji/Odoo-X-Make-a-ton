@@ -1,13 +1,5 @@
 import { prisma } from "../db/prisma.js";
-
-function addPeriod(date: Date, period: string): Date {
-  const next = new Date(date);
-  if (period === "WEEKLY") next.setDate(next.getDate() + 7);
-  else if (period === "MONTHLY") next.setMonth(next.getMonth() + 1);
-  else if (period === "QUARTERLY") next.setMonth(next.getMonth() + 3);
-  else if (period === "YEARLY") next.setFullYear(next.getFullYear() + 1);
-  return next;
-}
+import { billingDecision } from "./logic.js";
 
 function money(value: number): number { return Math.round((value + Number.EPSILON) * 100) / 100; }
 
@@ -20,18 +12,12 @@ export async function generateDueInvoices(businessId?: string, now = new Date())
   const results: Array<{ subscriptionId: string; status: "generated" | "skipped"; reason?: string; invoiceId?: string }> = [];
   for (const subscription of subscriptions) {
     const lastInvoice = subscription.invoices[0];
-    const periodStart = lastInvoice?.periodEnd ?? subscription.startDate;
-    const periodEnd = addPeriod(periodStart, subscription.plan.billingPeriod);
-    if (periodEnd > now && !lastInvoice) {
-      // Initial billing is due at the subscription start date.
-    } else if (periodEnd > now) {
-      results.push({ subscriptionId: subscription.id, status: "skipped", reason: "not_due" });
+    const decision = billingDecision({ startDate: subscription.startDate, billingPeriod: subscription.plan.billingPeriod, lastPeriodEnd: lastInvoice?.periodEnd ?? undefined, expiryDate: subscription.expiryDate, now, alreadyBilled: false });
+    if (decision.status === "skipped") {
+      results.push({ subscriptionId: subscription.id, status: "skipped", reason: decision.reason });
       continue;
     }
-    if (subscription.expiryDate && periodStart >= subscription.expiryDate) {
-      results.push({ subscriptionId: subscription.id, status: "skipped", reason: "expired" });
-      continue;
-    }
+    const { periodStart, periodEnd } = decision;
     const recurringKey = `${subscription.id}:${periodStart.toISOString()}:${periodEnd.toISOString()}`;
     const existing = await prisma.invoice.findFirst({ where: { businessId: subscription.businessId, recurringKey }, select: { id: true } });
     if (existing) {
