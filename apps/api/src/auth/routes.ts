@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
+import { rateLimit } from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 
 const router = Router();
+const authRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false, message: { error: "Too many authentication attempts. Try again later." } });
 const registerSchema = z.object({
   email: z.string().email().max(254),
   password: z.string().min(12).max(128),
@@ -22,7 +24,7 @@ function tokenSecret(): string {
   return secret;
 }
 
-router.post("/register", async (req, res, next) => {
+router.post("/register", authRateLimit, async (req, res, next) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid registration details.", details: parsed.error.flatten() });
@@ -63,7 +65,7 @@ router.post("/register", async (req, res, next) => {
   }
 });
 
-router.post("/login", async (req, res, next) => {
+router.post("/login", authRateLimit, async (req, res, next) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid login details." });
