@@ -1,7 +1,7 @@
 # NexBill — System Architecture
 
 **Version:** 0.2  
-**Status:** Architecture baseline; implementation in progress
+**Status:** Multi-tenant foundation implemented; application workflows in progress
 
 ## 1. Architecture
 
@@ -66,7 +66,7 @@ All endpoints use `/api/v1`.
 /dashboard
 ```
 
-The current API exposes health checks and placeholder module boundaries. Business logic and authorization are not yet implemented.
+The current API exposes health checks and placeholder module boundaries. Authentication and route-level membership verification are still pending.
 
 ## 5. Database Domain
 
@@ -96,17 +96,25 @@ The unique `recurringKey` is the database-level duplicate guard. It must be gene
 
 A payment record begins as `PENDING` and transitions based on verified provider or manual-payment outcomes. Use an idempotency key for retryable payment-creation requests and provider transaction references for reconciliation. Do not mark an invoice paid merely because a payment request was submitted; derive invoice balance/status from successful, non-refunded payment amounts and invoice totals.
 
-Refunds are not yet represented as separate records. Before implementing gateway refunds, add a refund entity or equivalent immutable refund ledger; do not overwrite the original payment amount or status to conceal partial refund history.
+Refunds are represented as separate immutable Refund records linked to the original payment. Refund amounts and statuses must be reconciled against the successful payment amount; never overwrite the original payment amount to conceal partial refund history.
 
 ### Subscription lifecycle
 
 The schema includes `PAUSED`, but lifecycle transitions, pause windows, proration, renewal timing and the meaning of plan flags still require service-level rules. Enforce allowed transitions in application services, not by allowing arbitrary status updates from API requests.
 
-## 6. Tenant Isolation Decision
+## 6. Tenant Isolation
 
-Multi-tenant deployment remains an explicit product decision in the SRS. The current schema is **not tenant-isolated**: users, catalog records, subscriptions and invoices are not owned by a business/workspace.
+NexBill supports both deployment modes using the same data model:
+- **Single-business deployment:** one Business/workspace is created during setup.
+- **Multi-tenant SaaS:** each independent business has its own Business/workspace and memberships.
 
-Until that decision is made, do not claim the system is safe for multiple independent businesses and do not expose it as a multi-tenant SaaS. If multi-tenancy is approved, introduce a Business/Workspace ownership boundary, tenant-scoped memberships and roles, tenant-scoped uniqueness constraints, and authorization checks before implementing customer-facing or financial endpoints. This change requires a deliberate migration; it should not be approximated with frontend filtering.
+Every tenant-owned record (customers, products, plans, subscriptions and invoices) carries a `businessId`. Membership assigns a user a role within a business; roles are no longer global. Customer identity remains global, while a customer can have a separate customer record in each business. Subscription and invoice numbers, and recurring invoice keys, are unique within a business.
+
+The migration creates a default business, backfills all existing tenant-owned records into it, copies each existing user's role into a membership, and then removes the global user role. Existing data therefore remains assigned to one workspace after migration.
+
+**Authorization requirement:** authentication must establish the user identity and verify an active Membership before setting `req.auth.tenant`. Routes must run tenant-context middleware and every database query must include the active `businessId`. Related record IDs supplied by clients must be checked against that same business before use. Never trust a business ID, user ID or role supplied only in a request body/header. The current helper fails closed when verified tenant context is absent. Composite foreign keys across every child table are not yet implemented, so service-level relation checks remain mandatory.
+
+For single-business self-hosted installs, use one business and do not disable tenant scoping. This keeps the deployment model compatible with later SaaS operation.
 
 ## 7. Reliability and Security Rules
 
@@ -125,7 +133,7 @@ Until that decision is made, do not claim the system is safe for multiple indepe
 
 1. Repository tooling and local infrastructure
 2. Prisma schema review, validation and migrations
-3. Resolve tenant model and authorization boundary
+3. Tenant ownership, memberships and tenant-context enforcement
 4. Authentication and role-based access
 5. Products, variants, plans and plan items
 6. Quotations and subscription lifecycle
