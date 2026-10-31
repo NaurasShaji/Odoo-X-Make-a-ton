@@ -86,6 +86,8 @@ model Business {
   invoices      Invoice[]
   invitations   BusinessInvitation[]
   quotations    Quotation[]
+  taxRules      TaxRule[]
+  discountRules DiscountRule[]
 }
 
 model Membership {
@@ -373,4 +375,36 @@ model BusinessInvitation {
 
   @@index([businessId, email, acceptedAt])
   @@index([expiresAt])
+}
+
+model TaxRule {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  rate       Decimal  @db.Decimal(5, 2)
+  isDefault  Boolean  @default(false)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, name])
+  @@unique([id, businessId])
+  @@index([businessId, active])
+}
+
+model DiscountRule {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  type       String
+  value      Decimal  @db.Decimal(12, 2)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, name])
+  @@unique([id, businessId])
+  @@index([businessId, active])
 }

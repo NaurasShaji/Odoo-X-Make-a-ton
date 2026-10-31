@@ -9,6 +9,7 @@ import subscriptionRouter from "./subscriptions/routes.js";
 import quotationRouter from "./quotations/routes.js";
 import invoiceRouter from "./invoices/routes.js";
 import paymentRouter from "./payments/routes.js";
+import pricingRulesRouter from "./pricing-rules/routes.js";
 import dashboardRouter from "./dashboard/routes.js";
 import { authenticate, resolveTenantContext } from "./tenancy/context.js";
 
@@ -30,6 +31,7 @@ app.use("/api/v1/quotations", authenticate, resolveTenantContext, quotationRoute
 app.use("/api/v1/subscriptions", authenticate, resolveTenantContext, subscriptionRouter);
 app.use("/api/v1/invoices", authenticate, resolveTenantContext, invoiceRouter);
 app.use("/api/v1/payments", authenticate, resolveTenantContext, paymentRouter);
+app.use("/api/v1/pricing-rules", authenticate, resolveTenantContext, pricingRulesRouter);
 app.use("/api/v1/dashboard", authenticate, resolveTenantContext, dashboardRouter);
 
 export default app;
