@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { AuthenticatedRequest, requireTenantRole, tenantScope } from "../tenancy/context.js";
 import { quotationTransition } from "./logic.js";
+import { calculatePricing } from "../billing/pricing.js";
 
 const router = Router();
 const money = z.number().finite().min(0).max(9999999999.99);
@@ -133,7 +134,7 @@ router.post("/:quotationId/actions/:action", async (req, res, next) => {
     if (quotation.validUntil && quotation.validUntil <= new Date() && quotation.status !== "EXPIRED") {
       res.status(409).json({ error: "This quotation has expired." }); return;
     }
-    const nextStatus = quotationTransition(quotation.status, action);
+    const nextStatus = quotationTransition(quotation.status, action as "send" | "accept" | "reject" | "expire");
     if (!nextStatus) { res.status(409).json({ error: `Action '${action}' is not allowed from status '${quotation.status}'.` }); return; }
     const changed = await prisma.quotation.updateMany({ where: { id, businessId: business, status: quotation.status }, data: { status: nextStatus } });
     if (changed.count !== 1) { res.status(409).json({ error: "Quotation status changed concurrently. Refresh and retry." }); return; }
@@ -170,7 +171,7 @@ router.post("/:quotationId/convert", async (req, res, next) => {
           startDate, expiryDate, status: "CONFIRMED",
           lines: { create: quotation.lines.map((line) => ({
             businessId: business, productId: line.productId, quantity: line.quantity,
-            unitPrice: line.unitPrice, taxRate: line.taxRate, amount: line.amount
+            unitPrice: line.unitPrice, taxRate: line.taxRate, amount: line.amount, discountAmount: line.discountAmount
           })) }
         },
         include: { customer: true, plan: true, lines: { include: { product: true } } }
