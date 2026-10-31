@@ -21,8 +21,10 @@ router.get("/summary", async (req, res, next) => {
     const monthlyMultiplier: Record<BillingPeriod, number> = { WEEKLY: 52 / 12, MONTHLY: 1, QUARTERLY: 1 / 3, YEARLY: 1 / 12 };
     const mrr = activeSubscriptions.reduce((sum, sub) => sum + Number(sub.plan.price) * monthlyMultiplier[sub.plan.billingPeriod], 0);
     const collected = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-    const outstanding = invoices.filter((invoice) => [InvoiceStatus.CONFIRMED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE].includes(invoice.status)).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - invoice.payments.reduce((paid, payment) => paid + Number(payment.amount), 0)), 0);
-    const overdue = invoices.filter((invoice) => invoice.status === InvoiceStatus.OVERDUE || (invoice.dueDate < now && ![InvoiceStatus.PAID, InvoiceStatus.CANCELLED].includes(invoice.status))).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - invoice.payments.reduce((paid, payment) => paid + Number(payment.amount), 0)), 0);
+    const receivableStatuses = new Set<InvoiceStatus>([InvoiceStatus.CONFIRMED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE]);
+    const outstanding = invoices.filter((invoice) => receivableStatuses.has(invoice.status)).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - invoice.payments.reduce((paid, payment) => paid + Number(payment.amount), 0)), 0);
+    const overdueStatuses = new Set<InvoiceStatus>([InvoiceStatus.CONFIRMED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE]);
+    const overdue = invoices.filter((invoice) => overdueStatuses.has(invoice.status) && invoice.dueDate < now).reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total) - invoice.payments.reduce((paid, payment) => paid + Number(payment.amount), 0)), 0);
     res.json({ metrics: { activeSubscriptions: activeSubscriptions.length, mrr: Number(mrr.toFixed(2)), arr: Number((mrr * 12).toFixed(2)), collected: Number(collected.toFixed(2)), outstanding: Number(outstanding.toFixed(2)), overdue: Number(overdue.toFixed(2)) }, upcomingRenewals });
   } catch (e) { next(e); }
 });
