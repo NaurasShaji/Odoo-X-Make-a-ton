@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { redisConnection } from "./queues.js";
+import { billingQueue, renewalQueue, redisConnection } from "./queues.js";
 import { generateDueInvoices } from "../billing/service.js";
 import { prisma } from "../db/prisma.js";
 
@@ -31,3 +31,8 @@ export const renewalWorker = new Worker(
   },
   { connection: redisConnection }
 );
+
+void Promise.all([
+  billingQueue.upsertJobScheduler("recurring-billing", { every: 60 * 60 * 1000 }, { name: "generate-invoices" }),
+  renewalQueue.upsertJobScheduler("renewal-check", { every: 6 * 60 * 60 * 1000 }, { name: "check-renewals" })
+]).catch((error) => console.error("Unable to schedule background jobs", error));
