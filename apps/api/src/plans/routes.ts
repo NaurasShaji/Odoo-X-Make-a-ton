@@ -5,18 +5,7 @@ import { AuthenticatedRequest, requireTenantRole, tenantScope } from "../tenancy
 
 const router = Router();
 const money = z.number().finite().min(0).max(9999999999.99);
-const planSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  price: money,
-  billingPeriod: z.enum(["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"]),
-  minQuantity: z.number().int().min(1).max(100000),
-  availableFrom: z.string().datetime().optional().nullable(),
-  availableUntil: z.string().datetime().optional().nullable(),
-  autoClose: z.boolean().default(false),
-  earlyClose: z.boolean().default(false),
-  allowPause: z.boolean().default(false),
-  autoRenew: z.boolean().default(false)
-}).strict();
+const planSchema = z.object({ name: z.string().trim().min(1).max(160), price: money, billingPeriod: z.enum(["WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"]), minQuantity: z.number().int().min(1).max(100000), availableFrom: z.string().datetime().optional().nullable(), availableUntil: z.string().datetime().optional().nullable(), autoClose: z.boolean().default(false), earlyClose: z.boolean().default(false), allowPause: z.boolean().default(false), autoRenew: z.boolean().default(false) }).strict();
 const itemSchema = z.object({ productId: z.string().min(1), quantity: z.number().finite().positive().max(100000) }).strict();
 const idOf = (req: Request) => typeof req.params.planId === "string" ? req.params.planId : null;
 const businessId = (req: AuthenticatedRequest) => req.auth?.tenant?.businessId ?? (() => { throw new Error("Verified business context is missing."); })();
@@ -113,7 +102,7 @@ router.patch("/:planId/items/:itemId", async (req, res, next) => {
   if (!parsed.success) { res.status(400).json({ error: "A valid quantity is required.", details: parsed.error.flatten() }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
-    const existing = await prisma.planItem.findFirst({ where: { id: itemId, planId, businessId } });
+    const existing = await prisma.planItem.findFirst({ where: { id: itemId, planId, businessId: business } });
     if (!existing) { res.status(404).json({ error: "Plan item not found." }); return; }
     const item = await prisma.planItem.update({ where: { id: itemId }, data: { quantity: parsed.data.quantity } });
     res.json({ item });
@@ -125,7 +114,7 @@ router.delete("/:planId/items/:itemId", async (req, res, next) => {
   if (!planId || !itemId) { res.status(400).json({ error: "Valid plan and item IDs are required." }); return; }
   try {
     const business = businessId(req as AuthenticatedRequest);
-    const existing = await prisma.planItem.findFirst({ where: { id: itemId, planId, businessId }, select: { id: true } });
+    const existing = await prisma.planItem.findFirst({ where: { id: itemId, planId, businessId: business }, select: { id: true } });
     if (!existing) { res.status(404).json({ error: "Plan item not found." }); return; }
     await prisma.planItem.delete({ where: { id: itemId } });
     res.status(204).send();
