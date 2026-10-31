@@ -202,12 +202,13 @@ router.patch("/members/:userId/role", requireTenantRole("ADMIN"), async (req, re
 router.delete("/members/:userId", requireTenantRole("ADMIN"), async (req, res, next) => {
   try {
     const tenant = (req as AuthenticatedRequest).auth!.tenant!;
-    if (req.params.userId === tenant.userId) {
+    const memberId = routeMemberId(req);
+    if (memberId === tenant.userId) {
       res.status(400).json({ error: "You cannot remove yourself. Transfer administration first." });
       return;
     }
     const target = await prisma.membership.findUnique({
-      where: { businessId_userId: { businessId: tenant.businessId, userId: req.params.userId } },
+      where: { businessId_userId: { businessId: tenant.businessId, userId: memberId } },
       select: { role: true }
     });
     if (!target) {
@@ -222,7 +223,7 @@ router.delete("/members/:userId", requireTenantRole("ADMIN"), async (req, res, n
       }
     }
     await prisma.membership.delete({
-      where: { businessId_userId: { businessId: tenant.businessId, userId: req.params.userId } }
+      where: { businessId_userId: { businessId: tenant.businessId, userId: memberId } }
     });
     res.status(204).send();
   } catch (error) {
