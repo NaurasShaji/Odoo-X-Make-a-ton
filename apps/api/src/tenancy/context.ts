@@ -21,7 +21,7 @@ export function requireTenantContext(
 ): void {
   const tenant = (req as TenantRequest).auth?.tenant;
 
-  if (!tenant?.userId || !tenant.businessId || !tenant.role) {
+  if (!tenant?.userId || tenant.userId !== (req as TenantRequest).auth?.userId || !tenant.businessId || !tenant.role) {
     res.status(403).json({ error: "A verified business membership is required." });
     return;
   }
